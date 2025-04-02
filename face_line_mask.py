@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 import torchvision.transforms as T
 
 class FaceLineMask:
@@ -10,8 +10,8 @@ class FaceLineMask:
             "required": {
                 "analysis_models": ("ANALYSIS_MODELS",),
                 "image": ("IMAGE",),
-                "line_width": ("INT", {"default": 2, "min": 1, "max": 100}),
-                "invert_mask": ("BOOLEAN", {"default": False}),
+                "feather_amount": ("INT", {"default": 0, "min": 0, "max": 100}),
+                "left_side_black": ("BOOLEAN", {"default": True}),
             }
         }
 
@@ -19,7 +19,7 @@ class FaceLineMask:
     FUNCTION = "create_mask"
     CATEGORY = "FaceAnalysis"
 
-    def create_mask(self, analysis_models, image, line_width, invert_mask):
+    def create_mask(self, analysis_models, image, feather_amount, left_side_black):
         out_masks = []
         
         for i in image:
@@ -29,25 +29,31 @@ class FaceLineMask:
             # Get face detection results
             img, x, y, w, h = analysis_models.get_bbox(i, 0, 0.0)
             
-            # Create a black mask (will be white where we want the line)
-            mask = Image.new('L', i.size, 0)
+            # Create a white mask
+            mask = Image.new('L', i.size, 255)
             draw = ImageDraw.Draw(mask)
             
-            # If we have at least 2 faces, draw a line between them
+            # If we have at least 2 faces, create the division mask
             if len(x) >= 2:
                 # Get centers of first two faces
                 face1_center = (x[0] + w[0]//2, y[0] + h[0]//2)
                 face2_center = (x[1] + w[1]//2, y[1] + h[1]//2)
                 
-                # Draw line between face centers
-                draw.line([face1_center, face2_center], fill=255, width=line_width)
+                # Calculate the midpoint between faces
+                mid_x = (face1_center[0] + face2_center[0]) // 2
+                
+                # Fill the left side with black
+                if left_side_black:
+                    draw.rectangle([0, 0, mid_x, i.size[1]], fill=0)
+                else:
+                    draw.rectangle([mid_x, 0, i.size[0], i.size[1]], fill=0)
+                
+                # Add feathering if requested
+                if feather_amount > 0:
+                    mask = mask.filter(ImageFilter.GaussianBlur(radius=feather_amount))
             
             # Convert mask to numpy array
             mask_array = np.array(mask).astype(np.float32) / 255.0
-            
-            # Invert the mask if requested
-            if invert_mask:
-                mask_array = 1.0 - mask_array
             
             # Convert to tensor
             mask_tensor = torch.from_numpy(mask_array)
