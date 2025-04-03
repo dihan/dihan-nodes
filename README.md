@@ -41,6 +41,7 @@ The node provides the following inputs:
 
 You can find example workflows in the `workflow` directory:
 - [Auto mask example 1.0.json](workflow/Auto%20mask%20example%201.0.json) - Demonstrates face line mask generation with feathering
+- [InstantID Multi ID Auto Mask Hack](workflow/InstantID_multi_id%20Auto%20Mask%20Hack.json) - Example of using face line masks with InstantID for multiple face processing
 
 ## License
 
