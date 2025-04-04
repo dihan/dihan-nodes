@@ -52,47 +52,32 @@ class FaceLineMask:
             dy = face2_center[1] - face1_center[1]
             angle = math.atan2(dy, dx)
             
-            # Calculate the perpendicular angle
+            # Calculate the perpendicular angle for the dividing line
             perp_angle = angle + math.pi/2
             
-            # Calculate points for the dividing line
-            # Make the line extend beyond the image boundaries
-            line_length = math.sqrt(width**2 + height**2) * 2  # Double the length to ensure coverage
+            # Calculate the midpoint
             mid_x = (face1_center[0] + face2_center[0]) // 2
             mid_y = (face1_center[1] + face2_center[1]) // 2
             
-            # Calculate endpoints of the line
-            x1 = mid_x - line_length * math.cos(perp_angle)
-            y1 = mid_y - line_length * math.sin(perp_angle)
-            x2 = mid_x + line_length * math.cos(perp_angle)
-            y2 = mid_y + line_length * math.sin(perp_angle)
+            # Create a numpy array for the mask
+            mask_array = np.zeros((height, width), dtype=np.uint8)
             
-            # Create a polygon for filling
-            # Calculate a point on one side of the line to determine which side to fill
-            test_x = mid_x + math.cos(angle) * 10  # Point slightly offset in direction of second face
-            test_y = mid_y + math.sin(angle) * 10
+            # Create coordinate grids
+            y_coords, x_coords = np.mgrid[0:height, 0:width]
             
-            # Create points for the polygon
+            # Calculate the signed distance from each point to the line
+            # The line equation is: (x-x0)*sin(angle) - (y-y0)*cos(angle) = 0
+            # where (x0,y0) is the midpoint and angle is perpendicular to the face direction
+            distances = (x_coords - mid_x) * math.sin(perp_angle) - (y_coords - mid_y) * math.cos(perp_angle)
+            
+            # Fill based on the distance and mask_side
             if mask_side:  # Right side
-                points = [
-                    (x1, y1),
-                    (x2, y2),
-                    (width + line_length, height + line_length),
-                    (width + line_length, -line_length),
-                    (x1, y1)
-                ]
+                mask_array[distances > 0] = 255
             else:  # Left side
-                points = [
-                    (x1, y1),
-                    (x2, y2),
-                    (-line_length, height + line_length),
-                    (-line_length, -line_length),
-                    (x1, y1)
-                ]
+                mask_array[distances < 0] = 255
             
-            # Draw the filled polygon
-            draw = ImageDraw.Draw(mask)
-            draw.polygon(points, fill=255)
+            # Convert back to PIL Image
+            mask = Image.fromarray(mask_array)
             
             # Add feathering if requested
             if feather_amount > 0:
