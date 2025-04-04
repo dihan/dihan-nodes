@@ -40,7 +40,6 @@ class FaceLineMask:
         
         # Create a base mask at the target size
         mask = Image.new('L', (width, height), 0)
-        draw = ImageDraw.Draw(mask)
         
         # If we have at least 2 faces, create the division mask
         if len(x) >= 2:
@@ -58,7 +57,7 @@ class FaceLineMask:
             
             # Calculate points for the dividing line
             # Make the line extend beyond the image boundaries
-            line_length = math.sqrt(width**2 + height**2)
+            line_length = math.sqrt(width**2 + height**2) * 2  # Double the length to ensure coverage
             mid_x = (face1_center[0] + face2_center[0]) // 2
             mid_y = (face1_center[1] + face2_center[1]) // 2
             
@@ -68,34 +67,32 @@ class FaceLineMask:
             x2 = mid_x + line_length * math.cos(perp_angle)
             y2 = mid_y + line_length * math.sin(perp_angle)
             
-            # Create a temporary image for the line mask
-            temp_mask = Image.new('L', (width, height), 0)
-            temp_draw = ImageDraw.Draw(temp_mask)
-            temp_draw.line([(x1, y1), (x2, y2)], fill=255, width=1)
+            # Create a polygon for filling
+            # Calculate a point on one side of the line to determine which side to fill
+            test_x = mid_x + math.cos(angle) * 10  # Point slightly offset in direction of second face
+            test_y = mid_y + math.sin(angle) * 10
             
-            # Fill the appropriate side based on mask_side
-            mask_array = np.array(temp_mask, dtype=np.uint8)
-            mask_array = np.where(mask_array > 0, 255, 0).astype(np.uint8)
+            # Create points for the polygon
+            if mask_side:  # Right side
+                points = [
+                    (x1, y1),
+                    (x2, y2),
+                    (width + line_length, height + line_length),
+                    (width + line_length, -line_length),
+                    (x1, y1)
+                ]
+            else:  # Left side
+                points = [
+                    (x1, y1),
+                    (x2, y2),
+                    (-line_length, height + line_length),
+                    (-line_length, -line_length),
+                    (x1, y1)
+                ]
             
-            if mask_side:
-                # When True, left side is 1.0 (masked)
-                # Fill the left side of the line
-                for y in range(height):
-                    line_points = np.where(mask_array[y] > 0)[0]
-                    if len(line_points) > 0:
-                        left_point = line_points[0]
-                        mask_array[y, :left_point] = 255
-            else:
-                # When False, right side is 1.0 (masked)
-                # Fill the right side of the line
-                for y in range(height):
-                    line_points = np.where(mask_array[y] > 0)[0]
-                    if len(line_points) > 0:
-                        right_point = line_points[-1]
-                        mask_array[y, right_point:] = 255
-            
-            # Convert back to PIL Image
-            mask = Image.fromarray(mask_array)
+            # Draw the filled polygon
+            draw = ImageDraw.Draw(mask)
+            draw.polygon(points, fill=255)
             
             # Add feathering if requested
             if feather_amount > 0:
