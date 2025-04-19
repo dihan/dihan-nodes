@@ -4,6 +4,10 @@ A collection of specialized nodes for face analysis and manipulation in ComfyUI.
 
 ![Face Line Mask Example](docs/workflow1.0.png)
 
+## Important Note
+
+This project requires a forked version of [ComfyUI_FaceAnalysis_Advanced](https://github.com/dihan/ComfyUI_FaceAnalysis_Advanced). Please make sure to use this specific fork for compatibility.
+
 ## Acknowledgments
 
 This project is inspired by and complements other great ComfyUI extensions, particularly Matteo [ComfyUI InstantID](https://github.com/cubiq/ComfyUI_InstantID) by cubiq. If you're interested in advanced face manipulation and identity preservation, I highly recommend checking out their excellent work.
