@@ -22,9 +22,21 @@ class FaceLineMask:
             }
         }
 
-    RETURN_TYPES = ("MASK", "Multiple Faces Bool?")
+    RETURN_TYPES = ("MASK", "BOOLEAN")
+    RETURN_NAMES = ("MASK", "Multiple Faces (Bool)")
     FUNCTION = "create_mask"
     CATEGORY = "FaceAnalysis"
+
+    def IS_CHANGED(self, **kwargs):
+        # This method is called to determine if the node's state has changed
+        # We'll use it to display a notification about multiple faces detection
+        return float("NaN")  # Always return NaN to indicate the node should be re-evaluated
+
+    def get_notification(self):
+        # This method returns a notification message that will be displayed in the UI
+        if hasattr(self, 'multiple_faces_status'):
+            return self.multiple_faces_status
+        return None
 
     def create_mask(self, analysis_models, image, width, height, feather_amount, mask_side, auto_detect_faces, auto_detect_gender):
         # Take first image if batch is provided
@@ -53,6 +65,9 @@ class FaceLineMask:
             
             # Check if multiple faces were detected
             multiple_faces_detected = len(x) >= 2
+            
+            # Store the detection status for notification
+            self.multiple_faces_status = f"Multiple Faces Detected: {multiple_faces_detected}"
             
             # If we have at least 2 faces, create the division mask
             if multiple_faces_detected:
@@ -120,4 +135,5 @@ class FaceLineMask:
         mask_tensor = torch.from_numpy(mask_array)
         mask_tensor = mask_tensor.unsqueeze(0)  # Add batch dimension
         
+        # Return the mask tensor and the multiple_faces_detected boolean in a format compatible with ComfyUI
         return (mask_tensor, multiple_faces_detected) 
