@@ -38,6 +38,53 @@ A specialized node that creates a mask based on the positions of two faces in an
 - Works with any image resolution up to 8192x8192
 - Handles diagonal face arrangements
 
+### FaceDetectionMarker
+
+A node that marks detected faces in an image with bounding boxes. Useful for:
+- Visualizing face detection results
+- Debugging face detection issues
+- Creating annotated images
+
+#### Parameters:
+
+- `analysis_models`: The face analysis models to use for detection
+- `image`: Input image to analyze
+- `marker_color`: Color of the bounding box (default: red)
+- `marker_thickness`: Thickness of the bounding box lines
+
+### FaceGenderDetect
+
+A node that detects the gender of faces in an image. Useful for:
+- Gender-based image processing
+- Demographic analysis
+- Conditional workflows based on gender
+
+#### Parameters:
+
+- `analysis_models`: The face analysis models to use for detection
+- `image`: Input image to analyze
+- `confidence_threshold`: Minimum confidence for gender detection
+
+### ImageOverlayCompare
+
+A node that overlays two images with adjustable opacity. Useful for:
+- Comparing images
+- Creating composite visualizations
+- Visualizing masks and their effects
+
+#### Parameters:
+
+- `image_a`: Base image
+- `image_b`: Overlay image
+- `opacity`: Opacity of the overlay (0.0 to 1.0)
+
+#### Features:
+
+- Real-time preview of the overlay
+- Adjustable opacity control
+- Automatic resizing of overlay to match base image
+- Grayscale conversion of overlay for better visualization
+
 ## Installation
 
 1. Clone this repository into your ComfyUI custom_nodes directory:
@@ -56,10 +103,17 @@ git clone [repository-url] dihan-nodes
 3. Adjust the mask side and feathering as needed
 4. Use the resulting mask for image composition or transitions
 
+### Image Overlay Comparison
+1. Connect your base image to `image_a`
+2. Connect your overlay image to `image_b`
+3. Adjust the opacity slider to control the overlay visibility
+4. View the result directly in the node preview
+
 ### Tips
 - For best results, ensure faces are clearly visible in the input image
 - Adjust feathering amount based on your desired transition smoothness
 - The mask will automatically adjust to face positions regardless of their arrangement
+- When using ImageOverlayCompare, try different opacity values to find the best visualization
 
 ## Requirements
 
