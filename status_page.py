@@ -139,9 +139,14 @@ def _kernel_evidence(since=None, pid=None, limit=12):
     tried because either can be unavailable depending on how the distro is
     started; failure to read is not itself interesting, so it stays quiet.
     """
+    # journalctl first: it spans boots, whereas dmesg (like `journalctl -k`)
+    # only ever shows the current one, which is no use for a crash that took
+    # the machine down with it. dmesg stays as the fallback for setups where
+    # the journal is volatile or unreadable.
     commands = (
+        ["journalctl", "_TRANSPORT=kernel", "--no-pager", "-o", "short-iso",
+         "--since", "-14days"],
         ["dmesg", "--ctime"],
-        ["journalctl", "-k", "--no-pager", "-n", "2000"],
     )
     for cmd in commands:
         try:
@@ -363,8 +368,12 @@ def _journal(args, grep=None, limit=5000):
 
 
 def _kernel_oom_events():
+    # _TRANSPORT=kernel rather than -k: the latter implies "current boot only",
+    # so every past crash silently loses its evidence the moment the machine
+    # (or `wsl --shutdown`) restarts -- exactly when you come looking for it.
     entries = _journal(
-        ["-k"], grep="(?i)oom-kill|Killed process|oom_reaper|dxgkio_make_resident"
+        ["_TRANSPORT=kernel"],
+        grep="(?i)oom-kill|Killed process|oom_reaper|dxgkio_make_resident",
     ) or []
     hits = []
     for when, text in entries:
