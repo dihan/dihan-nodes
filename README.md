@@ -60,76 +60,135 @@ If another extension has already claimed `/status`, this pack falls back to
 
 ## Available Nodes
 
+| Node | Display name | Category | Inputs | Outputs |
+|------|--------------|----------|--------|---------|
+| `FaceLineMask` | Face Line Mask | `FaceAnalysis` | `ANALYSIS_MODELS`, `IMAGE` | `MASK`, `BOOLEAN` |
+| `FaceDetectionMarker` | Face Detection Marker | `FaceAnalysis` | `ANALYSIS_MODELS`, `IMAGE` | `IMAGE` |
+| `FaceGenderDetect` | Face Gender Detect | `FaceAnalysis` | `ANALYSIS_MODELS`, `IMAGE` | `IMAGE` |
+| `ImageOverlayCompare` | Image Overlay Compare | `image/overlay` | `IMAGE`, `IMAGE` | *(preview only)* |
+
+The three `FaceAnalysis` nodes take an `ANALYSIS_MODELS` input from the
+[forked ComfyUI_FaceAnalysis_Advanced](https://github.com/dihan/ComfyUI_FaceAnalysis_Advanced).
+`ImageOverlayCompare` is standalone and works with any images.
+
+See [docs/NODES.md](docs/NODES.md) for the full parameter reference.
+
 ### FaceLineMask
 
-A specialized node that creates a mask based on the positions of two faces in an image. This node is particularly useful for:
-- Creating split-face compositions
-- Generating masks for face transitions
-- Dividing images based on face positions
+Creates a mask split along the line between two detected faces. Useful for:
+- Split-face compositions
+- Face transition masks
+- Dividing an image based on where the faces actually are
 
-#### Parameters:
+#### Parameters
 
-- `analysis_models`: The face analysis models to use for detection
-- `image`: Input image to analyze
-- `width`: Output mask width (default: 512, max: 8192)
-- `height`: Output mask height (default: 512, max: 8192)
-- `feather_amount`: Amount of feathering to apply to the mask edge (0-100)
-- `mask_side`: Which side to mask (Right/Left)
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `analysis_models` | ANALYSIS_MODELS | — | Face analysis models |
+| `image` | IMAGE | — | Image to analyze |
+| `width` | INT | 512 | Output mask width (1–8192) |
+| `height` | INT | 512 | Output mask height (1–8192) |
+| `feather_amount` | INT | 0 | Gaussian blur on the mask edge (0–100) |
+| `mask_side` | BOOLEAN | Right | Which side of the dividing line to fill |
+| `auto_detect_faces` | BOOLEAN | Off | Off = return a fully white mask, skipping detection |
+| `auto_detect_gender` | BOOLEAN | Off | Override `mask_side` from the first face's gender |
 
-#### Features:
+#### Outputs
 
-- Automatically detects face positions
-- Creates angled division lines based on face positions
-- Supports feathered edges for smooth transitions
-- Works with any image resolution up to 8192x8192
-- Handles diagonal face arrangements
+| Output | Type | Description |
+|--------|------|-------------|
+| `MASK` | MASK | Mask tensor, shape `[1, height, width]` |
+| `Multiple Faces (Bool)` | BOOLEAN | True when 2+ faces were detected |
+
+#### Behaviour notes
+
+- **`auto_detect_faces` is Off by default**, and Off means the node returns a fully
+  white mask without running detection — an easy way to bypass masking in a workflow.
+  Turn it On to actually split on face positions.
+- Splitting needs **at least two faces**. With Off/one face, the mask stays black.
+- `auto_detect_gender` calls `get_gender()` on the first two faces and sets
+  `mask_side` to Right when face 1 is female, Left when male. If gender detection
+  throws, your manual `mask_side` is kept.
+- The dividing line is perpendicular to the line joining the two face centres and
+  passes through their midpoint, so any diagonal arrangement works.
+- Face coordinates are scaled from the input image to `width`/`height`, and
+  `feather_amount` is scaled by the same factor.
+- Only the first image of a batch is used.
 
 ### FaceDetectionMarker
 
-A node that marks detected faces in an image with bounding boxes. Useful for:
-- Visualizing face detection results
-- Debugging face detection issues
-- Creating annotated images
+Draws bounding boxes around every detected face. Useful for:
+- Checking what the detector is actually seeing
+- Debugging detection and padding before committing to a mask
+- Producing annotated reference images
 
-#### Parameters:
+#### Parameters
 
-- `analysis_models`: The face analysis models to use for detection
-- `image`: Input image to analyze
-- `marker_color`: Color of the bounding box (default: red)
-- `marker_thickness`: Thickness of the bounding box lines
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `analysis_models` | ANALYSIS_MODELS | — | Face analysis models |
+| `image` | IMAGE | — | Image to analyze |
+| `marker_color` | red / green / blue / yellow / white | red | Box colour |
+| `line_width` | INT | 2 | Box outline thickness (1–10) |
+| `padding` | INT | 0 | Fixed pixels added to each bounding box (0–4096) |
+| `padding_percent` | FLOAT | 0.0 | Proportional padding (0.0–2.0, step 0.05) |
+
+#### Features
+
+- Marks **all** detected faces, not just the first two
+- Processes the whole batch and returns a batch
+- `padding` / `padding_percent` are passed to the detector, so the boxes drawn are
+  the same padded boxes a crop node downstream would receive
 
 ### FaceGenderDetect
 
-A node that detects the gender of faces in an image. Useful for:
-- Gender-based image processing
-- Demographic analysis
-- Conditional workflows based on gender
+Labels each detected face with its predicted gender. Useful for:
+- Verifying gender detection before wiring `auto_detect_gender` in FaceLineMask
+- Demographic sorting of a batch
+- Conditional workflows
 
-#### Parameters:
+#### Parameters
 
-- `analysis_models`: The face analysis models to use for detection
-- `image`: Input image to analyze
-- `confidence_threshold`: Minimum confidence for gender detection
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `analysis_models` | ANALYSIS_MODELS | — | Face analysis models |
+| `image` | IMAGE | — | Image to analyze |
+| `generate_image_overlay` | BOOLEAN | True | Draw the labelled boxes; False passes the image through untouched |
+
+#### Features
+
+- Male faces are boxed in **blue** and labelled `MALE`; female faces in **magenta**
+  and labelled `FEMALE`
+- Every detection is also logged to the ComfyUI console with its coordinates
+- Picks up a 32px system font (DejaVu / Arial / Helvetica depending on platform) and
+  falls back to PIL's built-in font if none is found
+- Output is always forced back to 3 channels
+- Requires `get_gender_locations()`, which exists only in the forked
+  FaceAnalysis_Advanced
 
 ### ImageOverlayCompare
 
-A node that overlays two images with adjustable opacity. Useful for:
-- Comparing images
-- Creating composite visualizations
-- Visualizing masks and their effects
+Composites `image_b` over `image_a` as a translucent white layer, using image_b's
+luminance as the alpha. Built for eyeballing a mask against the image it came from.
 
-#### Parameters:
+#### Parameters
 
-- `image_a`: Base image
-- `image_b`: Overlay image
-- `opacity`: Opacity of the overlay (0.0 to 1.0)
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `image_a` | IMAGE | — | Base image |
+| `image_b` | IMAGE | — | Overlay, read as grayscale → alpha |
+| `opacity` | FLOAT | 0.5 | Overlay strength (0.0–1.0, step 0.01) |
 
-#### Features:
+#### Features
 
-- Real-time preview of the overlay
-- Adjustable opacity control
-- Automatic resizing of overlay to match base image
-- Grayscale conversion of overlay for better visualization
+- **Preview only** — this node has no outputs. It extends `PreviewImage`, so the
+  result appears in the node itself and nothing is passed downstream.
+- Bright areas of `image_b` show as white; dark areas stay transparent. Feed a mask
+  into `image_b` to see exactly what it covers.
+- `image_b` is auto-resized to `image_a`'s dimensions with nearest-neighbour
+  sampling, so mask edges stay crisp rather than being smoothed by the resize.
+- Only the first image of a batch is used.
+- Lives under the `image/overlay` category, not `FaceAnalysis`.
 
 ## Installation
 
@@ -146,17 +205,31 @@ git clone [repository-url] dihan-nodes
 ### Basic Face Mask Creation
 1. Connect your image to the FaceLineMask node
 2. Connect your face analysis models
-3. Adjust the mask side and feathering as needed
-4. Use the resulting mask for image composition or transitions
+3. **Set `auto_detect_faces` to On** — while it is Off the node returns a fully white
+   mask and never runs detection
+4. Adjust `mask_side` and `feather_amount` as needed
+5. Use the resulting mask for image composition or transitions
+
+### Checking Detection Before Masking
+1. Run FaceDetectionMarker on the same image first
+2. Confirm both faces are boxed, and tune `padding` / `padding_percent`
+3. Then wire FaceLineMask with the same models
+
+### Gender-Driven Masking
+1. Run FaceGenderDetect to confirm the labels are correct on your image
+2. On FaceLineMask, turn on both `auto_detect_faces` and `auto_detect_gender`
+3. `mask_side` is now chosen automatically — Right when the first face is female
 
 ### Image Overlay Comparison
 1. Connect your base image to `image_a`
-2. Connect your overlay image to `image_b`
+2. Connect the mask or overlay image to `image_b`
 3. Adjust the opacity slider to control the overlay visibility
-4. View the result directly in the node preview
+4. View the result directly in the node preview — this node has no outputs
 
 ### Tips
 - For best results, ensure faces are clearly visible in the input image
+- FaceLineMask needs **two** faces; check `Multiple Faces (Bool)` to branch a workflow
+  when only one is found
 - Adjust feathering amount based on your desired transition smoothness
 - The mask will automatically adjust to face positions regardless of their arrangement
 - When using ImageOverlayCompare, try different opacity values to find the best visualization
