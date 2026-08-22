@@ -126,6 +126,29 @@
     border: 1px solid color-mix(in srgb, var(--bad) 35%, transparent);
   }
 
+  /* --- tabs -------------------------------------------------------------- */
+  /* [hidden] needs the !important: the panels below set display:grid, which
+     would otherwise win and show a hidden panel anyway. */
+  [hidden] { display: none !important; }
+
+  .tabs { display: flex; gap: 6px; }
+  .tabs > button {
+    flex: 1; padding: 8px 10px; font-size: 13px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .tabs > button.on {
+    background: var(--accent); color: #fff;
+    border-color: var(--accent);
+  }
+  .badge {
+    min-width: 17px; padding: 1px 5px; border-radius: 999px;
+    font-size: 10px; font-weight: 700; line-height: 1.5;
+    background: var(--bad); color: #fff;
+  }
+  .tabs > button.on .badge { background: rgba(255, 255, 255, .25); }
+
+  #panel-status, #panel-crashes { display: grid; gap: 12px; }
+
   /* --- failures ---------------------------------------------------------- */
   .tag.oom { color: var(--warn); }
   .tag.killed { color: var(--bad); }
@@ -182,6 +205,13 @@
     <span class="pill" id="pill"><span class="dot"></span><span id="pilltext">…</span></span>
   </header>
 
+  <nav class="tabs">
+    <button class="on" data-panel="status">Status</button>
+    <button data-panel="crashes">Crashes<span class="badge" id="crashbadge" hidden></span></button>
+  </nav>
+
+  <div id="panel-status">
+
   <section class="card" id="runcard">
     <h2>Current run</h2>
     <div id="runbody"><div class="empty">Idle</div></div>
@@ -197,11 +227,6 @@
     <div class="stack" id="resbody"><div class="empty">—</div></div>
   </section>
 
-  <section class="card" id="failcard" hidden>
-    <h2>Failures</h2>
-    <div id="failbody"></div>
-  </section>
-
   <section class="card" id="histcard" hidden>
     <h2>Recent runs</h2>
     <ul class="list" id="histbody"></ul>
@@ -213,6 +238,22 @@
       <pre id="log">…</pre>
     </details>
   </section>
+
+  </div><!-- /panel-status -->
+
+  <div id="panel-crashes" hidden>
+
+    <section class="card">
+      <h2>Process crashes</h2>
+      <div id="crashbody"><div class="empty">…</div></div>
+    </section>
+
+    <section class="card" id="failcard" hidden>
+      <h2>Node failures</h2>
+      <div id="failbody"></div>
+    </section>
+
+  </div><!-- /panel-crashes -->
 
 </div>
 
@@ -505,6 +546,122 @@
     }
   }
 
+  // --- crash history ------------------------------------------------------
+  // Read back from the service journal rather than from anything this page
+  // recorded, so it can explain a crash that took the page down with it --
+  // including crashes from before this feature existed.
+  var crashTimer = null;
+  var crashLoaded = false;
+
+  function clock(at) {
+    if (!at) return "";
+    try { return new Date(at * 1000).toLocaleString(); } catch (e) { return ""; }
+  }
+
+  function renderCrashes(d) {
+    var host = $("crashbody");
+
+    if (!d.available) {
+      host.innerHTML = '<div class="empty">' +
+        esc(d.reason || "Crash history unavailable.") + "</div>";
+      return;
+    }
+
+    var list = d.crashes || [];
+    var oomCount = list.filter(function (c) { return c.oom; }).length;
+
+    var badge = $("crashbadge");
+    if (list.length) {
+      badge.hidden = false;
+      badge.textContent = d.total != null ? d.total : list.length;
+    } else {
+      badge.hidden = true;
+    }
+
+    if (!list.length) {
+      host.innerHTML = '<div class="empty">No crashes recorded for ' +
+        esc(d.unit || "this service") + " in the last 14 days.</div>";
+      return;
+    }
+
+    var head = "";
+    if (oomCount >= 2) {
+      // Repeated kills of the same shape are a capacity problem, not bad luck.
+      head = '<div class="err" style="margin:0 0 12px">' +
+        "<strong>" + oomCount + " out-of-memory kills</strong><br>" +
+        "The machine keeps running out of RAM and the kernel is killing " +
+        "ComfyUI. Raising the WSL memory limit or lowering peak usage is the " +
+        "fix; restarting only resets the clock.</div>";
+    }
+
+    var now = Date.now() / 1000;
+    host.innerHTML = head + list.map(function (c) {
+      var tag = c.oom ? "oom" : "killed";
+      var tagText = c.oom ? "OOM" : "exit " + esc(c.status);
+      var ago = c.at ? dur(now - c.at) + " ago" : "";
+      var body = "";
+      body += frow("When", clock(c.at));
+      body += frow("Exit", "code=" + c.code + " status=" + c.status);
+      if (c.downtime != null) body += frow("Restarted after", dur(c.downtime));
+      else body += frow("Restarted", "no restart seen in the journal");
+      body += snip("Kernel evidence", (c.kernel || []).join("\n"), "kernel");
+
+      return '<details class="fail">' +
+        "<summary><span class='tag " + tag + "'>" + tagText + "</span>" +
+        '<span class="flabel">' + esc(clock(c.at)) + "</span>" +
+        '<span class="v">' + esc(ago) + "</span></summary>" +
+        '<div class="fmsg">' + esc(c.reason || "") + "</div>" +
+        '<div class="fdetail">' + body + "</div></details>";
+    }).join("");
+  }
+
+  function pullCrashes() {
+    fetch(API + "/crashes?limit=15", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { crashLoaded = true; renderCrashes(d); })
+      .catch(function () {
+        if (!crashLoaded) {
+          $("crashbody").innerHTML = '<div class="empty">Could not load crash history.</div>';
+        }
+      })
+      .finally(function () {
+        clearTimeout(crashTimer);
+        // Only keep polling while the tab is actually being looked at; the
+        // server caches these reads, but the journal scan is not free.
+        if (!$("panel-crashes").hidden && !document.hidden) {
+          crashTimer = setTimeout(pullCrashes, 30000);
+        }
+      });
+  }
+
+  // --- tabs ---------------------------------------------------------------
+  function showPanel(name) {
+    var crashes = name === "crashes";
+    $("panel-status").hidden = crashes;
+    $("panel-crashes").hidden = !crashes;
+
+    var buttons = document.querySelectorAll(".tabs > button");
+    for (var i = 0; i < buttons.length; i++) {
+      buttons[i].classList.toggle("on", buttons[i].dataset.panel === name);
+    }
+    try { localStorage.setItem("dihanStatusTab", name); } catch (e) {}
+    if (crashes) pullCrashes(); else clearTimeout(crashTimer);
+  }
+
+  (function initTabs() {
+    var buttons = document.querySelectorAll(".tabs > button");
+    for (var i = 0; i < buttons.length; i++) {
+      buttons[i].addEventListener("click", function () {
+        showPanel(this.dataset.panel);
+      });
+    }
+    var want = location.hash === "#crashes" ? "crashes" : null;
+    if (!want) {
+      try { want = localStorage.getItem("dihanStatusTab"); } catch (e) {}
+    }
+    showPanel(want === "crashes" ? "crashes" : "status");
+  })();
+
   function render(d) {
     window.__last = d;
     var srv = d.server || {};
@@ -587,10 +744,17 @@
   });
 
   document.addEventListener("visibilitychange", function () {
-    if (!document.hidden) { schedule(0); pullLogs(); }
+    if (document.hidden) return;
+    schedule(0);
+    pullLogs();
+    if (!$("panel-crashes").hidden) pullCrashes();
   });
 
   tick();
+
+  // Populate the tab badge on load even when the Status tab is showing, so a
+  // crash while you were away is visible without going looking for it.
+  if ($("panel-crashes").hidden) pullCrashes();
 })();
 </script>
 </body>

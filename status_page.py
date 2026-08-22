@@ -30,6 +30,7 @@ to explain a crash that took the page down with it.
 
 import json
 import os
+import re
 import subprocess
 import threading
 import time
@@ -275,6 +276,191 @@ def _clear_marker():
         os.remove(MARKER_PATH)
     except OSError:
         pass
+
+
+# ---------------------------------------------------------------------------
+# Crash history, reconstructed from the journal
+# ---------------------------------------------------------------------------
+#
+# The marker file above can only describe crashes that happened while this
+# code was loaded. systemd and the kernel, however, have been keeping records
+# all along -- so the crash history can be read back retroactively, including
+# crashes that predate this feature entirely. That is the only way to answer
+# "what happened last time?" after the page has already died with the server.
+
+_EXIT_RE = re.compile(r"Main process exited,\s*code=(\w+),\s*status=([0-9A-Za-z]+)")
+_STARTED_RE = re.compile(r"Started .*\.service|Started .* - ")
+
+# 128 + signal number, as reported by systemd for a signalled process.
+_SIGNALS = {
+    134: ("SIGABRT", "aborted"),
+    137: ("SIGKILL", "killed"),
+    139: ("SIGSEGV", "segfaulted"),
+    143: ("SIGTERM", "asked to stop"),
+}
+
+# A kernel OOM message can land slightly before the exit systemd notices.
+_OOM_WINDOW_BEFORE = 240.0
+_OOM_WINDOW_AFTER = 60.0
+
+_CRASH_CACHE = {"at": 0.0, "data": None}
+_CRASH_TTL = 20.0
+
+
+def _unit_name():
+    """The systemd unit this process belongs to, if any."""
+    try:
+        with open("/proc/self/cgroup", "r", encoding="utf-8") as handle:
+            text = handle.read()
+    except OSError:
+        return None
+    match = re.search(r"/([A-Za-z0-9_.@\\-]+\.service)", text)
+    return match.group(1) if match else None
+
+
+def _run_journal(cmd):
+    try:
+        proc = subprocess.run(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=10
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0 or not proc.stdout:
+        return None
+    return proc.stdout
+
+
+def _journal(args, grep=None, limit=5000):
+    """Run journalctl with epoch timestamps, returning (when, text) pairs.
+
+    Filtering server-side with -g matters: a plain tail of the last N lines
+    silently drops older crashes as ComfyUI's own chatter pushes them out of
+    the window, which reads as "fewer crashes" rather than "truncated".
+    Falls back to the tail if this journalctl has no -g.
+    """
+    base = ["journalctl", "--no-pager", "-o", "short-unix", "--since", "-14days"]
+    raw = None
+    if grep:
+        raw = _run_journal(base + ["-g", grep] + list(args))
+    if raw is None:
+        raw = _run_journal(base + ["-n", str(limit)] + list(args))
+    if raw is None:
+        return None
+
+    out = []
+    for line in raw.decode("utf-8", "replace").splitlines():
+        head, sep, rest = line.partition(" ")
+        if not sep:
+            continue
+        try:
+            when = float(head)
+        except ValueError:
+            continue
+        # Drop the "host process[pid]:" prefix, keeping just the message.
+        _, _, message = rest.partition(": ")
+        out.append((when, (message or rest).strip()))
+    return out
+
+
+def _kernel_oom_events():
+    entries = _journal(
+        ["-k"], grep="(?i)oom-kill|Killed process|oom_reaper|dxgkio_make_resident"
+    ) or []
+    hits = []
+    for when, text in entries:
+        low = text.lower()
+        if any(pat in low for pat in _KERNEL_OOM_PATTERNS):
+            hits.append((when, text[:FAIL_LOG_LINE_CHARS]))
+    return hits
+
+
+def _describe_exit(code, status, oom):
+    """Plain-language reason for a unit exit."""
+    try:
+        status_num = int(status)
+    except (TypeError, ValueError):
+        status_num = None
+
+    if oom:
+        return "Killed by the Linux OOM killer -- the machine ran out of memory."
+    if status_num in _SIGNALS:
+        signal_name, verb = _SIGNALS[status_num]
+        if status_num == 137:
+            return ("Killed with SIGKILL. Nothing in the kernel log ties it to "
+                    "memory, but an OOM kill that scrolled out of the ring "
+                    "buffer still looks exactly like this.")
+        if status_num == 143:
+            return "Stopped with SIGTERM -- normally a deliberate stop or restart."
+        return "Process %s (%s)." % (verb, signal_name)
+    if status_num == 0:
+        return "Exited cleanly."
+    if status_num is not None:
+        return "Exited with code %d." % status_num
+    return "Exited (code=%s, status=%s)." % (code, status)
+
+
+def _crash_history(limit=15):
+    """Every unit exit in the journal, with OOM evidence attached."""
+    now = time.time()
+    cached = _CRASH_CACHE.get("data")
+    if cached is not None and now - _CRASH_CACHE["at"] < _CRASH_TTL:
+        return cached
+
+    unit = _unit_name()
+    result = {"unit": unit, "available": False, "reason": None, "crashes": []}
+
+    if not unit:
+        result["reason"] = ("Not running under a systemd unit, so there is no "
+                            "service journal to read crash history from.")
+        _CRASH_CACHE.update(at=now, data=result)
+        return result
+
+    entries = _journal(["-u", unit], grep="Main process exited|Started")
+    if entries is None:
+        result["reason"] = ("Could not read the journal for %s. The account "
+                            "running ComfyUI may lack permission." % unit)
+        _CRASH_CACHE.update(at=now, data=result)
+        return result
+
+    oom_events = _kernel_oom_events()
+    starts = [when for when, text in entries if _STARTED_RE.search(text)]
+
+    crashes = []
+    for when, text in entries:
+        match = _EXIT_RE.search(text)
+        if not match:
+            continue
+        code, status = match.group(1), match.group(2)
+
+        evidence = [
+            line for at, line in oom_events
+            if when - _OOM_WINDOW_BEFORE <= at <= when + _OOM_WINDOW_AFTER
+        ]
+        # A dxgk ENOMEM alone means VRAM pressure, not a kill; only treat the
+        # process-kill lines as proof the kernel took it.
+        killed = any(
+            ("killed process" in line.lower() or "oom-kill:" in line.lower())
+            for line in evidence
+        )
+
+        restarted = next((s for s in starts if s > when), None)
+        crashes.append({
+            "at": when,
+            "code": code,
+            "status": status,
+            "oom": killed,
+            "reason": _describe_exit(code, status, killed),
+            "kernel": evidence[-6:],
+            "restarted_at": restarted,
+            "downtime": (restarted - when) if restarted else None,
+        })
+
+    crashes.reverse()  # newest first
+    result["available"] = True
+    result["crashes"] = crashes[:limit]
+    result["total"] = len(crashes)
+    _CRASH_CACHE.update(at=now, data=result)
+    return result
 
 
 class StatusTracker:
@@ -932,6 +1118,22 @@ def _register_routes():
         limit = max(1, min(limit, MAX_FAILURES))
         return web.json_response(
             {"failures": _read_failures(limit)}, headers={"Cache-Control": "no-store"}
+        )
+
+    @routes.get(base + "/api/crashes")
+    async def status_crashes(request):
+        """Crash history read back from the service journal.
+
+        Independent of the failure log: this works retroactively, so it can
+        explain a crash that happened before this code was ever loaded.
+        """
+        try:
+            limit = int(request.rel_url.query.get("limit", 15))
+        except ValueError:
+            limit = 15
+        limit = max(1, min(limit, 50))
+        return web.json_response(
+            _crash_history(limit), headers={"Cache-Control": "no-store"}
         )
 
     @routes.get(base + "/api/logs")
