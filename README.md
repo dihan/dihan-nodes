@@ -12,6 +12,52 @@ This project requires a forked version of [ComfyUI_FaceAnalysis_Advanced](https:
 
 This project is inspired by and complements other great ComfyUI extensions, particularly Matteo [ComfyUI InstantID](https://github.com/cubiq/ComfyUI_InstantID) by cubiq. If you're interested in advanced face manipulation and identity preservation, I highly recommend checking out their excellent work.
 
+## Mobile Status Page
+
+This pack also serves a lightweight status dashboard at **`/status`** on ComfyUI's own
+web server — no separate process, no port to open. It is a few KB of plain HTML with no
+dependencies, so it loads instantly on a phone without pulling in the full ComfyUI
+frontend.
+
+The URL follows whatever port you launched ComfyUI with:
+
+| Launch | Status page |
+| --- | --- |
+| default | `http://<your-ip>:8188/status` |
+| `--port 8189` | `http://<your-ip>:8189/status` |
+
+The exact URL is printed to the console on startup:
+
+```
+[dihan-nodes] status page: http://<your-ip>:8189/status
+```
+
+To reach it from your phone, start ComfyUI with `--listen 0.0.0.0` and use your
+machine's LAN IP.
+
+### What it shows
+
+- **Current run** — node being executed (title + class), overall progress, sampler step
+  count with ETA, elapsed time, and nodes completed
+- **Queue** — how many prompts are pending, plus the running and queued job numbers
+- **Resources** — VRAM used/free per device, Torch reserved memory, system RAM
+- **Recent runs** — last few prompts with duration and success/error/interrupted status
+- **Terminal log** — collapsible tail of ComfyUI's console output
+- **Interrupt** — cancel the current run from your phone (tap twice to confirm)
+
+Polling adapts on its own: 1s while a run is active, 3s when idle, 20s when the tab is
+backgrounded, so it costs almost nothing to leave open.
+
+### Endpoints
+
+The page is driven by two small JSON endpoints, usable on their own:
+
+- `GET /status/api/snapshot` — everything above in one object
+- `GET /status/api/logs?tail=200` — recent console lines
+
+If another extension has already claimed `/status`, this pack falls back to
+`/dihan-status` instead of colliding.
+
 ## Available Nodes
 
 ### FaceLineMask
