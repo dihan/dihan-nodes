@@ -125,6 +125,50 @@
     background: color-mix(in srgb, var(--bad) 12%, transparent);
     border: 1px solid color-mix(in srgb, var(--bad) 35%, transparent);
   }
+
+  /* --- failures ---------------------------------------------------------- */
+  .tag.oom { color: var(--warn); }
+  .tag.killed { color: var(--bad); }
+
+  details.fail { border-bottom: 1px solid var(--line); padding: 8px 0; }
+  details.fail:last-child { border-bottom: 0; padding-bottom: 0; }
+  details.fail:first-child { padding-top: 0; }
+  /* Override the small-caps summary styling used by the terminal log box. */
+  details.fail > summary {
+    display: flex; gap: 8px; align-items: baseline;
+    font-size: 12px; font-weight: 500; text-transform: none;
+    letter-spacing: normal; color: var(--text);
+  }
+  details.fail > summary::after { content: ""; }
+  details.fail > summary .flabel {
+    font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  details.fail > summary .v { margin-left: auto; color: var(--muted); font-size: 11px; white-space: nowrap; }
+  details.fail[open] > summary { margin-bottom: 8px; }
+
+  .fmsg {
+    font-size: 12px; color: var(--muted); margin: 4px 0 0 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  details.fail[open] .fmsg { white-space: normal; }
+
+  .fsec { margin-top: 10px; }
+  .fsec > .h {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--muted); margin-bottom: 4px;
+  }
+  pre.snip {
+    margin: 0; max-height: 30vh; overflow: auto;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px; font-size: 11px; line-height: 1.45;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    white-space: pre-wrap; word-break: break-word;
+    -webkit-overflow-scrolling: touch;
+  }
+  pre.snip.kernel {
+    background: color-mix(in srgb, var(--warn) 10%, transparent);
+    border-color: color-mix(in srgb, var(--warn) 35%, transparent);
+  }
 </style>
 </head>
 <body>
@@ -151,6 +195,11 @@
   <section class="card">
     <h2>Resources</h2>
     <div class="stack" id="resbody"><div class="empty">—</div></div>
+  </section>
+
+  <section class="card" id="failcard" hidden>
+    <h2>Failures</h2>
+    <div id="failbody"></div>
   </section>
 
   <section class="card" id="histcard" hidden>
@@ -346,6 +395,116 @@
     }).join("");
   }
 
+  // --- failures -----------------------------------------------------------
+  // Summaries ride along in every snapshot; the heavy detail (traceback, log
+  // tail, kernel lines) is pulled once, on demand, when an entry is expanded.
+  var failSig = "";
+  var failDetail = null;
+  var failPending = false;
+
+  function snip(title, text, cls) {
+    if (!text) return "";
+    return '<div class="fsec"><div class="h">' + esc(title) + "</div>" +
+      '<pre class="snip ' + (cls || "") + '">' + esc(text) + "</pre></div>";
+  }
+
+  function frow(k, v) {
+    if (v == null || v === "") return "";
+    return '<div class="row"><span class="k">' + esc(k) +
+      '</span><span class="v">' + esc(v) + "</span></div>";
+  }
+
+  function failBody(f) {
+    if (!f) return '<div class="muted" style="font-size:11px">Detail unavailable.</div>';
+    var html = "";
+    html += frow("Type", f.exception_type);
+    html += frow("Node", f.node_id ? (f.node_label || "") + " (#" + f.node_id + ")" : f.node_label);
+    if (f.elapsed != null) html += frow("Failed after", dur(f.elapsed));
+
+    var dev = (f.memory && f.memory.devices || [])[0];
+    if (dev && dev.vram_total) {
+      html += frow("VRAM at failure",
+        bytes(dev.vram_total - dev.vram_free) + " / " + bytes(dev.vram_total));
+    }
+    if (f.memory && f.memory.ram_total) {
+      html += frow("RAM at failure",
+        bytes(f.memory.ram_total - f.memory.ram_free) + " / " + bytes(f.memory.ram_total));
+    }
+
+    html += snip("Message", f.message);
+    html += snip("Kernel evidence", (f.kernel || []).join("\n"), "kernel");
+    html += snip("Traceback", (f.traceback || []).join(""));
+    html += snip("Log tail", (f.log_tail || []).join("\n"));
+    return html;
+  }
+
+  function fillDetail(el) {
+    var host = el.querySelector(".fdetail");
+    if (!host || host.dataset.filled) return;
+    var f = failDetail && failDetail[el.dataset.id];
+    if (!f) return;
+    host.innerHTML = failBody(f);
+    host.dataset.filled = "1";
+  }
+
+  function loadDetail(el) {
+    if (failDetail) { fillDetail(el); return; }
+    if (failPending) return;
+    failPending = true;
+    fetch(API + "/failures?limit=10", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        failDetail = {};
+        (d.failures || []).forEach(function (f) { failDetail[f.id] = f; });
+        var open = document.querySelectorAll("details.fail[open]");
+        for (var i = 0; i < open.length; i++) fillDetail(open[i]);
+      })
+      .catch(function () {})
+      .finally(function () { failPending = false; });
+  }
+
+  function renderFailures(d) {
+    var list = d.failures || [];
+    $("failcard").hidden = list.length === 0;
+    if (!list.length) { failSig = ""; return; }
+
+    var now = d.now || 0;
+    var sig = list.map(function (f) { return f.id; }).join("|");
+
+    if (sig === failSig) {
+      // Same failures -- refresh the relative times only, so an entry the
+      // user has expanded is not collapsed out from under them every poll.
+      var stamps = $("failbody").querySelectorAll("summary .v");
+      for (var i = 0; i < stamps.length && i < list.length; i++) {
+        stamps[i].textContent = list[i].at && now ? dur(now - list[i].at) + " ago" : "";
+      }
+      return;
+    }
+    failSig = sig;
+    failDetail = null;  // a new failure landed; the cached detail is stale
+
+    $("failbody").innerHTML = list.map(function (f) {
+      var tag = f.oom ? "oom" : f.kind === "process_died" ? "killed" : "error";
+      var tagText = f.oom ? "OOM" : f.kind === "process_died" ? "killed" : "error";
+      var ago = f.at && now ? dur(now - f.at) + " ago" : "";
+      return '<details class="fail" data-id="' + esc(f.id) + '">' +
+        "<summary><span class='tag " + tag + "'>" + tagText + "</span>" +
+        '<span class="flabel">' +
+        esc(f.node_label || f.exception_type || "Failure") + "</span>" +
+        '<span class="v">' + esc(ago) + "</span></summary>" +
+        '<div class="fmsg">' + esc(f.message || "") + "</div>" +
+        '<div class="fdetail"></div></details>';
+    }).join("");
+
+    // `toggle` does not bubble, so each entry needs its own listener.
+    var nodes = $("failbody").querySelectorAll("details.fail");
+    for (var j = 0; j < nodes.length; j++) {
+      nodes[j].addEventListener("toggle", function () {
+        if (this.open) loadDetail(this);
+      });
+    }
+  }
+
   function render(d) {
     window.__last = d;
     var srv = d.server || {};
@@ -355,13 +514,22 @@
       "up " + dur(srv.uptime)
     ].filter(Boolean).join(" · ");
 
+    var newest = (d.failures && d.failures[0]) || null;
     if (d.state === "running") setPill("running", "Running");
-    else if (d.history && d.history[0] && d.history[0].status === "error") setPill("error", "Last run failed");
-    else setPill("idle", "Idle");
+    else if (d.history && d.history[0] && d.history[0].status === "error") {
+      setPill("error", newest && newest.oom ? "Last run OOM'd" : "Last run failed");
+    } else if (newest && newest.kind === "process_died" &&
+               !(d.history && d.history.length)) {
+      // Nothing has run in this process yet, but the previous one died
+      // mid-run. Surfacing that is the point of persisting it across the
+      // restart; the first completed run here supersedes it.
+      setPill("error", newest.oom ? "Previous run OOM-killed" : "Previous run died");
+    } else setPill("idle", "Idle");
 
     renderRun(d);
     renderQueue(d);
     renderResources(d);
+    renderFailures(d);
     renderHistory(d);
   }
 

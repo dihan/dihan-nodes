@@ -33,4 +33,7 @@ ENV/
 
 # OS
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Runtime state for the status page (failure log, in-flight run marker)
+.state/ 

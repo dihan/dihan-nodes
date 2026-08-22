@@ -11,9 +11,26 @@ Progress is captured by teeing ``PromptServer.send_sync``: every event the
 server emits is recorded into a small in-process snapshot before being passed
 through untouched. This is why the page sees live progress even though those
 events are addressed only to the client that submitted the prompt.
+
+Failures are recorded two ways, because they fail in two very different ways:
+
+* A node raising (including a CUDA OOM) emits ``execution_error``. That is
+  caught, enriched with the traceback, the memory state at the moment it blew
+  up, and the tail of the terminal log, then appended to ``failures.jsonl``.
+
+* The process being killed outright -- the Linux OOM killer taking ComfyUI
+  when system RAM is exhausted -- emits nothing at all, because there is no
+  longer a process to emit it. For that case a marker file tracks the run in
+  flight; if it is still there at the next startup, the previous run died and
+  the kernel log is searched for the evidence.
+
+Persisting to disk is what makes the second case work: the page has to be able
+to explain a crash that took the page down with it.
 """
 
+import json
 import os
+import subprocess
 import threading
 import time
 from collections import deque
@@ -28,10 +45,236 @@ except Exception:  # pragma: no cover - not running inside ComfyUI
 HERE = os.path.dirname(os.path.abspath(__file__))
 PAGE_PATH = os.path.join(HERE, "web", "status.html")
 
+STATE_DIR = os.path.join(HERE, ".state")
+FAILURE_PATH = os.path.join(STATE_DIR, "failures.jsonl")
+MARKER_PATH = os.path.join(STATE_DIR, "current_run.json")
+
 HISTORY_LEN = 12
 LOG_TAIL_DEFAULT = 200
 
+# Bounds on what gets persisted per failure. Enough to diagnose, small enough
+# that the file stays readable and the /api/failures response stays sane.
+MAX_FAILURES = 50
+FAIL_LOG_LINES = 40
+FAIL_LOG_LINE_CHARS = 400
+FAIL_TRACE_FRAMES = 20
+
+# How long after an execution_error the task_done fallback assumes the failure
+# has already been recorded in detail and stays quiet.
+DEDUPE_WINDOW = 30.0
+
 _BOOT_TIME = time.time()
+_STATE_LOCK = threading.Lock()
+
+
+# ---------------------------------------------------------------------------
+# Failure persistence
+# ---------------------------------------------------------------------------
+
+# Substrings that mark an exception as a memory exhaustion rather than an
+# ordinary bug. Matched case-insensitively against the type and message.
+_OOM_MARKERS = (
+    "outofmemoryerror",
+    "cuda out of memory",
+    "out of memory",
+    "can't allocate memory",
+    "cannot allocate memory",
+    "defaultcpuallocator: not enough memory",
+    "no memory available",
+)
+
+# Kernel log lines that indicate the *process* was killed for memory reasons.
+# The dxgk entry is WSL specific: it is the GPU paravirtualisation layer
+# reporting ENOMEM (-12) when it cannot make an allocation resident in VRAM.
+_KERNEL_OOM_PATTERNS = (
+    "out of memory: killed process",
+    "oom-kill:",
+    "oom_reaper",
+    "killed process",
+    "dxgkio_make_resident: ioctl failed: -12",
+)
+
+_failure_seq = 0
+
+
+def _ensure_state_dir():
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        return True
+    except OSError:
+        return False
+
+
+def _classify_oom(exception_type, message):
+    """Return True when the text looks like memory exhaustion."""
+    blob = ("%s %s" % (exception_type or "", message or "")).lower()
+    return any(marker in blob for marker in _OOM_MARKERS)
+
+
+def _log_tail(lines=FAIL_LOG_LINES):
+    """Last few lines of ComfyUI's own terminal log, trimmed for storage."""
+    try:
+        from app.logger import get_logs
+
+        entries = list(get_logs())[-lines:]
+    except Exception:
+        return []
+    out = []
+    for entry in entries:
+        try:
+            text = str(entry.get("m", "")).rstrip("\n")
+        except Exception:
+            continue
+        if not text:
+            continue
+        out.append(text[:FAIL_LOG_LINE_CHARS])
+    return out
+
+
+def _kernel_evidence(since=None, pid=None, limit=12):
+    """Best-effort scan of the kernel ring buffer for OOM-kill evidence.
+
+    Runs only after a suspected crash, never on the hot path. Both readers are
+    tried because either can be unavailable depending on how the distro is
+    started; failure to read is not itself interesting, so it stays quiet.
+    """
+    commands = (
+        ["dmesg", "--ctime"],
+        ["journalctl", "-k", "--no-pager", "-n", "2000"],
+    )
+    for cmd in commands:
+        try:
+            proc = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+            )
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if proc.returncode != 0 or not proc.stdout:
+            continue
+
+        text = proc.stdout.decode("utf-8", "replace")
+        hits = []
+        for line in text.splitlines():
+            low = line.lower()
+            if not any(pat in low for pat in _KERNEL_OOM_PATTERNS):
+                continue
+            # A pid match is strong evidence; without one the line still counts,
+            # since the ring buffer may have wrapped past the kill message.
+            hits.append(line.strip()[:FAIL_LOG_LINE_CHARS])
+        if hits:
+            if pid is not None:
+                exact = [h for h in hits if str(pid) in h]
+                if exact:
+                    return exact[-limit:]
+            return hits[-limit:]
+    return []
+
+
+def _next_failure_id():
+    global _failure_seq
+    _failure_seq += 1
+    return "%d-%d" % (int(time.time() * 1000), _failure_seq)
+
+
+def _append_failure(record):
+    """Append one failure to the log, trimming it back to MAX_FAILURES."""
+    if not _ensure_state_dir():
+        return None
+    record.setdefault("id", _next_failure_id())
+    record.setdefault("at", time.time())
+    line = json.dumps(record, default=str)
+
+    with _STATE_LOCK:
+        try:
+            with open(FAILURE_PATH, "a", encoding="utf-8") as handle:
+                handle.write(line + "\n")
+        except OSError as exc:
+            print("[dihan-nodes] could not write failure log: %s" % exc)
+            return None
+
+        try:
+            with open(FAILURE_PATH, "r", encoding="utf-8") as handle:
+                kept = handle.readlines()
+            if len(kept) > MAX_FAILURES:
+                with open(FAILURE_PATH, "w", encoding="utf-8") as handle:
+                    handle.writelines(kept[-MAX_FAILURES:])
+        except OSError:
+            pass
+    return record
+
+
+def _read_failures(limit=10):
+    """Most recent failures first."""
+    with _STATE_LOCK:
+        try:
+            with open(FAILURE_PATH, "r", encoding="utf-8") as handle:
+                raw = handle.readlines()
+        except OSError:
+            return []
+
+    out = []
+    for line in reversed(raw):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            out.append(json.loads(line))
+        except ValueError:
+            continue
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _summarise(record):
+    """Compact form carried in every snapshot; detail is fetched on demand."""
+    message = (record.get("message") or "").strip()
+    first = message.splitlines()[0] if message else ""
+    return {
+        "id": record.get("id"),
+        "at": record.get("at"),
+        "kind": record.get("kind"),
+        "oom": bool(record.get("oom")),
+        "node_label": record.get("node_label") or record.get("node_type"),
+        "node_id": record.get("node_id"),
+        "exception_type": record.get("exception_type"),
+        "message": first[:200],
+    }
+
+
+# -- crash marker ------------------------------------------------------------
+#
+# Written while a run is in flight and removed when it ends. Surviving the
+# process is the whole point: a marker present at startup means the previous
+# run never reached an end state.
+
+def _write_marker(payload):
+    if not _ensure_state_dir():
+        return
+    try:
+        with open(MARKER_PATH, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle)
+    except (OSError, TypeError):
+        pass
+
+
+def _read_marker():
+    try:
+        with open(MARKER_PATH, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        return data if isinstance(data, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def _clear_marker():
+    try:
+        os.remove(MARKER_PATH)
+    except OSError:
+        pass
 
 
 class StatusTracker:
@@ -44,6 +287,8 @@ class StatusTracker:
         self.history = deque(maxlen=HISTORY_LEN)
         self.last_event = None
         self.last_event_at = None
+        self.failures = deque(_summarise(r) for r in _read_failures(8))
+        self._recent_error_at = 0.0
 
     def reset_run(self):
         self.prompt_id = None
@@ -55,6 +300,8 @@ class StatusTracker:
         self.nodes = {}
         self.cached = set()
         self.error = None
+        self.graph = None
+        self._marker_at = 0.0
 
     # -- event intake ----------------------------------------------------
 
@@ -73,6 +320,7 @@ class StatusTracker:
                 self.reset_run()
                 self.prompt_id = data.get("prompt_id")
                 self.started = time.time()
+                self._mark(force=True)
 
             elif event == "execution_cached":
                 for nid in data.get("nodes") or []:
@@ -107,6 +355,7 @@ class StatusTracker:
                     "node_type": data.get("node_type") or "",
                     "message": data.get("exception_message") or "",
                 }
+                self._record_error(data)
                 self._finish("error")
 
             elif event == "execution_interrupted":
@@ -121,6 +370,132 @@ class StatusTracker:
             self.node_started = time.time()
             self.node_value = 0.0
             self.node_max = 0.0
+            self._mark()
+
+    # -- crash marker ----------------------------------------------------
+
+    def _mark(self, force=False):
+        """Record what is in flight, so a kill leaves a trail.
+
+        Called on node transitions rather than on every progress tick, and
+        throttled on top of that: this sits on the executor's event path, so
+        it must stay cheap.
+        """
+        now = time.time()
+        if not force and now - self._marker_at < 1.0:
+            return
+        self._marker_at = now
+        _write_marker(
+            {
+                "pid": os.getpid(),
+                "prompt_id": self.prompt_id,
+                "started": self.started,
+                "updated": now,
+                "node_id": self.node_id,
+                "node_label": self._label_for(self.node_id),
+                "value": self.node_value,
+                "max": self.node_max,
+            }
+        )
+
+    def _label_for(self, node_id):
+        """Resolve a node id to a human label, caching the graph per run."""
+        if node_id is None:
+            return None
+        if self.graph is None:
+            try:
+                queue = PromptServer.instance.prompt_queue
+                getter = (getattr(queue, "get_current_queue_volatile", None)
+                          or queue.get_current_queue)
+                current_running, _ = getter()
+                for item in current_running or []:
+                    if len(item) > 2 and isinstance(item[2], dict):
+                        if not self.prompt_id or item[1] == self.prompt_id:
+                            self.graph = item[2]
+                            break
+            except Exception:
+                pass
+            if self.graph is None:
+                self.graph = {}
+        return _node_label(self.graph, node_id)
+
+    # -- failure recording -----------------------------------------------
+
+    def _record_error(self, data):
+        """Turn an execution_error event into a durable failure record."""
+        message = data.get("exception_message") or ""
+        exception_type = data.get("exception_type") or ""
+        node_id = str(data.get("node_id") or "") or None
+        oom = _classify_oom(exception_type, message)
+
+        traceback_lines = data.get("traceback")
+        if not isinstance(traceback_lines, list):
+            traceback_lines = []
+        traceback_lines = [
+            str(frame)[:FAIL_LOG_LINE_CHARS]
+            for frame in traceback_lines[-FAIL_TRACE_FRAMES:]
+        ]
+
+        record = {
+            "kind": "node_error",
+            "prompt_id": data.get("prompt_id") or self.prompt_id,
+            "node_id": node_id,
+            "node_type": data.get("node_type") or "",
+            "node_label": self._label_for(node_id) or data.get("node_type") or "",
+            "exception_type": exception_type,
+            "message": message.strip(),
+            "traceback": traceback_lines,
+            "oom": oom,
+            "elapsed": (time.time() - self.started) if self.started else None,
+            "memory": _system_info(),
+            "log_tail": _log_tail(),
+        }
+        # A CUDA OOM often has a kernel-side counterpart (the WSL dxgk ENOMEM
+        # lines), which distinguishes "this allocation failed" from "the whole
+        # GPU allocator is wedged".
+        if oom:
+            record["kernel"] = _kernel_evidence(since=self.started, pid=os.getpid())
+
+        self._recent_error_at = time.time()
+        self._push_failure(record)
+
+    def note_unreported_failure(self, messages):
+        """Fallback for a failed prompt that never emitted execution_error.
+
+        ``add_message`` only reaches ``send_sync`` when a client is attached,
+        so an API-submitted prompt can fail silently as far as the hook is
+        concerned. ``task_done`` always runs, so it backstops that case.
+        """
+        with self._lock:
+            if time.time() - self._recent_error_at < DEDUPE_WINDOW:
+                return  # already captured in full detail
+            text = "\n".join(str(m) for m in (messages or []))[:4000]
+            self._push_failure(
+                {
+                    "kind": "queue_error",
+                    "prompt_id": self.prompt_id,
+                    "node_label": self._label_for(self.node_id),
+                    "node_id": self.node_id,
+                    "exception_type": "",
+                    "message": text or "Prompt reported an error with no detail.",
+                    "traceback": [],
+                    "oom": _classify_oom("", text),
+                    "memory": _system_info(),
+                    "log_tail": _log_tail(),
+                }
+            )
+
+    def _push_failure(self, record):
+        stored = _append_failure(record)
+        if stored:
+            self.failures.appendleft(_summarise(stored))
+            while len(self.failures) > 8:
+                self.failures.pop()
+
+    def add_recovered_failure(self, record):
+        """Record a crash reconstructed at startup (see _recover_crash)."""
+        with self._lock:
+            self._push_failure(record)
 
     def _apply_progress_state(self, data):
         nodes = data.get("nodes")
@@ -143,6 +518,9 @@ class StatusTracker:
             self.node_max = _num(node.get("max"))
 
     def _finish(self, status):
+        # Clear unconditionally: the run reached an end state, so a marker left
+        # from it would be misread as a crash by the next startup.
+        _clear_marker()
         if self.prompt_id is None and self.started is None:
             return
         self.history.appendleft(
@@ -177,6 +555,7 @@ class StatusTracker:
                 "run": run,
                 "queue_remaining": self.queue_remaining,
                 "history": list(self.history),
+                "failures": list(self.failures),
                 "last_event": self.last_event,
                 "last_event_at": self.last_event_at,
             }
@@ -254,6 +633,102 @@ def _install_hook():
 
     send_sync._dihan_status_hook = True
     PromptServer.send_sync = send_sync
+
+
+def _install_queue_hook():
+    """Backstop for failures that never reach send_sync.
+
+    ``PromptQueue.task_done`` runs for every prompt, attached client or not, so
+    it catches the errors the event tee structurally cannot see.
+    """
+    try:
+        from execution import PromptQueue
+    except Exception:
+        return
+
+    original = PromptQueue.task_done
+    if getattr(original, "_dihan_status_hook", False):
+        return
+
+    def task_done(self, *args, **kwargs):
+        try:
+            status = kwargs.get("status")
+            if status is None and len(args) > 2:
+                status = args[2]
+            if status is not None and getattr(status, "status_str", None) == "error":
+                TRACKER.note_unreported_failure(getattr(status, "messages", None))
+        except Exception:
+            pass  # never let bookkeeping break the queue
+        return original(self, *args, **kwargs)
+
+    task_done._dihan_status_hook = True
+    PromptQueue.task_done = task_done
+
+
+# ---------------------------------------------------------------------------
+# Crash recovery
+# ---------------------------------------------------------------------------
+
+def _recover_crash():
+    """Reconstruct a failure for a run that died without reporting.
+
+    A marker still on disk at startup means the previous process vanished
+    mid-run: OOM-killed, segfaulted, or stopped. The kernel log is the only
+    place the reason survives, so it is searched here -- in a background
+    thread, because the readers can take a moment and startup should not wait.
+    """
+    marker = _read_marker()
+    if not marker:
+        return
+    _clear_marker()
+
+    def work():
+        kernel = _kernel_evidence(since=marker.get("started"), pid=marker.get("pid"))
+        oom = bool(kernel)
+        label = marker.get("node_label") or (
+            "node %s" % marker.get("node_id") if marker.get("node_id") else "unknown node"
+        )
+        if oom:
+            message = (
+                "ComfyUI exited during this run and the kernel log shows memory "
+                "pressure around that time. It was most likely killed for running "
+                "out of memory while executing %s." % label
+            )
+        else:
+            message = (
+                "ComfyUI exited during this run without reporting an error, while "
+                "executing %s. No kernel memory evidence was found, so this was "
+                "more likely a manual stop, a restart, or a hard crash." % label
+            )
+
+        started = marker.get("started")
+        updated = marker.get("updated")
+        TRACKER.add_recovered_failure(
+            {
+                "kind": "process_died",
+                "at": updated or time.time(),
+                "prompt_id": marker.get("prompt_id"),
+                "node_id": marker.get("node_id"),
+                "node_label": marker.get("node_label"),
+                "exception_type": "ProcessExited",
+                "message": message,
+                "traceback": [],
+                "oom": oom,
+                "elapsed": (updated - started) if (started and updated) else None,
+                "progress": {"value": marker.get("value"), "max": marker.get("max")},
+                "dead_pid": marker.get("pid"),
+                "kernel": kernel,
+                # The log tail here is the *current* process's log, which is not
+                # the dead one's. Left out deliberately to avoid implying it is.
+                "log_tail": [],
+            }
+        )
+        print(
+            "[dihan-nodes] recovered an unfinished run from the previous process "
+            "(%s)" % ("suspected OOM kill" if oom else "cause unknown")
+        )
+
+    threading.Thread(target=work, name="dihan-crash-recovery", daemon=True).start()
 
 
 # ---------------------------------------------------------------------------
@@ -446,6 +921,19 @@ def _register_routes():
     async def status_snapshot(request):
         return web.json_response(_build_snapshot(), headers={"Cache-Control": "no-store"})
 
+    @routes.get(base + "/api/failures")
+    async def status_failures(request):
+        """Full failure records. Fetched on demand -- these carry tracebacks
+        and log tails, so they are far too heavy for the polling snapshot."""
+        try:
+            limit = int(request.rel_url.query.get("limit", 10))
+        except ValueError:
+            limit = 10
+        limit = max(1, min(limit, MAX_FAILURES))
+        return web.json_response(
+            {"failures": _read_failures(limit)}, headers={"Cache-Control": "no-store"}
+        )
+
     @routes.get(base + "/api/logs")
     async def status_logs(request):
         try:
@@ -476,6 +964,14 @@ def setup():
         return
     try:
         _install_hook()
+        _install_queue_hook()
         _register_routes()
     except Exception as exc:  # pragma: no cover
         print("[dihan-nodes] status page disabled: %s" % exc)
+
+    # Independent of the page itself: even if route registration failed above,
+    # an unfinished run from the previous process is still worth recording.
+    try:
+        _recover_crash()
+    except Exception as exc:  # pragma: no cover
+        print("[dihan-nodes] crash recovery skipped: %s" % exc)
