@@ -199,11 +199,13 @@ luminance as the alpha. Built for eyeballing a mask against the image it came fr
 Two nodes for keeping **two people's identities** in a single Krea 2 in-context edit —
 one character per reference slot, both faces preserved, in one pass.
 
-The krea2 identity-edit LoRA was trained on the reference order `[scene, subject]`, so
-its *last* reference slot is structurally favoured. Putting two people in those slots
-works, but the second one wins by default — which is why balanced results usually need
-the last slot's boost set lower than the first's. These nodes take that as the starting
-point and add the controls the two-character case actually needs:
+The krea2 identity-edit LoRA was trained on the reference order `[scene, subject]`, and
+the two slots do different jobs: the first is *reproduced* near-pixel, the last is
+*re-rendered* into the scene. Putting two people in them works, but the character in the
+last slot is the one whose likeness has to survive a re-render, so its dial (`identity_b`
+= the model card's `ref_boost`) does real work — the card's strong-likeness value is
+**~4**, and `1.0` means off. These nodes take that as the starting point and add the
+controls the two-character case actually needs:
 
 - a **face mask per character**, not just for the last reference
 - **soft masks** — a feathered mask ramps the boost instead of hard-gating it
@@ -211,7 +213,7 @@ point and add the controls the two-character case actually needs:
   exclusivity dial that suppresses each character outside its own region
 - **reference isolation** — stop the two references blending into an average face
   before the target ever reads them
-- an **order swap** toggle, to test which character wants the favoured slot
+- an **order swap** toggle, to test which face is easier to copy and which to re-render
 
 Everything is off or neutral by default: with just the two images wired, the sequence is
 identical to the upstream `Krea2EditModelPatch` with `source_image` / `source_image_b`.

@@ -108,10 +108,12 @@ img_b = node("LoadImage", (620, 300), (450, 400), ["character_b.png", "image"],
 note("Two people, one pass", (620, 740), (450, 250),
      "One clear photo per character. Head-and-shoulders or half-body reads best;\n"
      "a tiny face in a wide shot has few reference tokens to give.\n\n"
-     "Both faces are placed in a SINGLE pass. Chaining two single-character edits\n"
-     "is less reliable - the second pass tends to re-render the first face.\n\n"
-     "The B slot is the LoRA's 'subject' slot and pulls harder on the output.\n"
-     "That asymmetry is why identity_a usually ends up ABOVE identity_b.\n\n"
+     "Both faces are placed in a SINGLE pass. If they still drift toward each\n"
+     "other after tuning, the model card's own workaround is to chain: generate\n"
+     "with A, then run that output back in as character_a and insert B.\n\n"
+     "Slot A is REPRODUCED by the LoRA, slot B is RE-RENDERED into the scene.\n"
+     "So A's likeness mostly comes for free and B's is the one you tune - that\n"
+     "is what identity_b (the model card's ref_boost, ~4) is for.\n\n"
      "Wire the same images, in the same order, into the encode node.")
 
 # ── 3 · INSTRUCTION ───────────────────────────────────────────────────────────
@@ -141,7 +143,7 @@ note("Writing the instruction", (1140, 530), (520, 460),
 
 # ── 4 · IDENTITY ──────────────────────────────────────────────────────────────
 patch = node("Krea2TwoCharacterPatch", (1730, -150), (450, 400),
-             [1.0, 1.0, "fit", 0.0, False, False],
+             [1.0, 4.0, "fit", 0.0, False, False],
              inputs=[inp("model", "MODEL"), inp("vae", "VAE"),
                      inp("character_a", "IMAGE"), inp("character_b", "IMAGE"),
                      inp("target_latent", "LATENT", True),
@@ -150,18 +152,26 @@ patch = node("Krea2TwoCharacterPatch", (1730, -150), (450, 400),
              outputs=[out("MODEL", "MODEL")])
 note("Tuning, in order", (1730, 600), (450, 560),
      "Change ONE thing at a time. The dials interact.\n\n"
-     "1. Start where it is: both identities 1.0, no masks, <= 2 MP.\n\n"
-     "2. One face is weak -> raise THAT dial in 0.1-0.2 steps, leave the other at\n"
-     "   1.0. Balanced pairs usually land with A above B (e.g. 1.4 / 1.0).\n\n"
+     "1. Start where it is: identity_b 4.0 (the model card's strong-likeness\n"
+     "   value), identity_a 1.0, no masks, 1-1.5 MP.\n\n"
+     "   1.0 is the dial OFF, not a baseline. Creeping up from 1.0 in 0.1 steps\n"
+     "   is how people conclude that B 'needs 10'.\n\n"
+     "2. One face is weak -> move THAT dial in whole steps (1 -> 2 -> 4 -> 6),\n"
+     "   leave the other alone. Past ~10 the card says the edit breaks down; if\n"
+     "   B is still weak at 10, stop turning and go to step 3.\n\n"
      "3. The two faces blend into one person -> paint a face mask per character\n"
      "   (group 5) so the boost targets faces, not clothes and background.\n"
      "   Still blending -> isolate_references on.\n\n"
      "4. Faces swap sides, or both come out as the same person -> enable the\n"
      "   region masks (group 5) and set region_exclusivity 0.5-0.8.\n\n"
      "5. Result looks pasted together -> both dials BELOW 1.0.\n\n"
-     "6. Stuck -> swap_reference_order on, then redo step 2. It tests whether the\n"
-     "   other character wants the favoured slot. Swap the images on the encode\n"
-     "   node to match.\n\n"
+     "6. Stuck -> swap_reference_order on, then redo step 2. It puts the other\n"
+     "   character in the copied slot, which tells you which face is easier to\n"
+     "   preserve. Swap the images on the encode node to match.\n\n"
+     "Also from the model card: grounding_px HIGHER = stronger identity (768,\n"
+     "up to ~1024; lower it if you get doubled compositions), 12 steps favour\n"
+     "face detail over 8, and 'fit' geometry needs the v1.2 weights - on v1.1\n"
+     "use 'crop (legacy)' and match the source aspect ratio.\n\n"
      "Any dial off-neutral builds an L x L attention bias: slower, and a few\n"
      "hundred MB at ~1 MP. At 1.0 / 1.0 with nothing wired, it costs nothing.")
 
@@ -227,9 +237,10 @@ markdown("START HERE", (60, -560), (1600, 370),
          "Needs the dihan-nodes pack (Krea2TwoCharacterPatch / Krea2TwoCharacterEncode)\n"
          "plus the four model files listed in group 1.\n\n"
          "The one thing worth knowing up front: the LoRA's two reference slots are not\n"
-         "equal. Character B sits in the slot the model was trained to treat as 'the\n"
-         "subject to preserve', so it pulls harder. If one face is winning, that is\n"
-         "why - and identity_a / identity_b in group 4 are how you even it out.\n\n"
+         "equal. Slot A is REPRODUCED near-pixel; slot B is RE-RENDERED into the new\n"
+         "scene. So A's face tends to arrive on its own and B's is the one that needs\n"
+         "the dial - identity_b ships at 4.0 here because that is the strong-likeness\n"
+         "value in the LoRA's model card. identity_a starts at 1.0 (off).\n\n"
          "Full reference: docs/KREA2_TWO_CHARACTER.md")
 
 # ── wiring ────────────────────────────────────────────────────────────────────

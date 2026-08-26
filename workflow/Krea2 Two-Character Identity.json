@@ -299,7 +299,7 @@
         "Node name for S&R": "Note"
       },
       "widgets_values": [
-        "One clear photo per character. Head-and-shoulders or half-body reads best;\na tiny face in a wide shot has few reference tokens to give.\n\nBoth faces are placed in a SINGLE pass. Chaining two single-character edits\nis less reliable - the second pass tends to re-render the first face.\n\nThe B slot is the LoRA's 'subject' slot and pulls harder on the output.\nThat asymmetry is why identity_a usually ends up ABOVE identity_b.\n\nWire the same images, in the same order, into the encode node."
+        "One clear photo per character. Head-and-shoulders or half-body reads best;\na tiny face in a wide shot has few reference tokens to give.\n\nBoth faces are placed in a SINGLE pass. If they still drift toward each\nother after tuning, the model card's own workaround is to chain: generate\nwith A, then run that output back in as character_a and insert B.\n\nSlot A is REPRODUCED by the LoRA, slot B is RE-RENDERED into the scene.\nSo A's likeness mostly comes for free and B's is the one you tune - that\nis what identity_b (the model card's ref_boost, ~4) is for.\n\nWire the same images, in the same order, into the encode node."
       ],
       "title": "Two people, one pass",
       "color": "#432",
@@ -515,7 +515,7 @@
       },
       "widgets_values": [
         1.0,
-        1.0,
+        4.0,
         "fit",
         0.0,
         false,
@@ -542,7 +542,7 @@
         "Node name for S&R": "Note"
       },
       "widgets_values": [
-        "Change ONE thing at a time. The dials interact.\n\n1. Start where it is: both identities 1.0, no masks, <= 2 MP.\n\n2. One face is weak -> raise THAT dial in 0.1-0.2 steps, leave the other at\n   1.0. Balanced pairs usually land with A above B (e.g. 1.4 / 1.0).\n\n3. The two faces blend into one person -> paint a face mask per character\n   (group 5) so the boost targets faces, not clothes and background.\n   Still blending -> isolate_references on.\n\n4. Faces swap sides, or both come out as the same person -> enable the\n   region masks (group 5) and set region_exclusivity 0.5-0.8.\n\n5. Result looks pasted together -> both dials BELOW 1.0.\n\n6. Stuck -> swap_reference_order on, then redo step 2. It tests whether the\n   other character wants the favoured slot. Swap the images on the encode\n   node to match.\n\nAny dial off-neutral builds an L x L attention bias: slower, and a few\nhundred MB at ~1 MP. At 1.0 / 1.0 with nothing wired, it costs nothing."
+        "Change ONE thing at a time. The dials interact.\n\n1. Start where it is: identity_b 4.0 (the model card's strong-likeness\n   value), identity_a 1.0, no masks, 1-1.5 MP.\n\n   1.0 is the dial OFF, not a baseline. Creeping up from 1.0 in 0.1 steps\n   is how people conclude that B 'needs 10'.\n\n2. One face is weak -> move THAT dial in whole steps (1 -> 2 -> 4 -> 6),\n   leave the other alone. Past ~10 the card says the edit breaks down; if\n   B is still weak at 10, stop turning and go to step 3.\n\n3. The two faces blend into one person -> paint a face mask per character\n   (group 5) so the boost targets faces, not clothes and background.\n   Still blending -> isolate_references on.\n\n4. Faces swap sides, or both come out as the same person -> enable the\n   region masks (group 5) and set region_exclusivity 0.5-0.8.\n\n5. Result looks pasted together -> both dials BELOW 1.0.\n\n6. Stuck -> swap_reference_order on, then redo step 2. It puts the other\n   character in the copied slot, which tells you which face is easier to\n   preserve. Swap the images on the encode node to match.\n\nAlso from the model card: grounding_px HIGHER = stronger identity (768,\nup to ~1024; lower it if you get doubled compositions), 12 steps favour\nface detail over 8, and 'fit' geometry needs the v1.2 weights - on v1.1\nuse 'crop (legacy)' and match the source aspect ratio.\n\nAny dial off-neutral builds an L x L attention bias: slower, and a few\nhundred MB at ~1 MP. At 1.0 / 1.0 with nothing wired, it costs nothing."
       ],
       "title": "Tuning, in order",
       "color": "#432",
@@ -911,7 +911,7 @@
         "Node name for S&R": "Note"
       },
       "widgets_values": [
-        "KREA 2 - TWO-CHARACTER IDENTITY\n==============================\n\nTwo people, both faces preserved, one pass. Load a photo of each character\nin group 2, write the scene in group 3, hit Run. Everything else is tuning.\n\nNeeds the dihan-nodes pack (Krea2TwoCharacterPatch / Krea2TwoCharacterEncode)\nplus the four model files listed in group 1.\n\nThe one thing worth knowing up front: the LoRA's two reference slots are not\nequal. Character B sits in the slot the model was trained to treat as 'the\nsubject to preserve', so it pulls harder. If one face is winning, that is\nwhy - and identity_a / identity_b in group 4 are how you even it out.\n\nFull reference: docs/KREA2_TWO_CHARACTER.md"
+        "KREA 2 - TWO-CHARACTER IDENTITY\n==============================\n\nTwo people, both faces preserved, one pass. Load a photo of each character\nin group 2, write the scene in group 3, hit Run. Everything else is tuning.\n\nNeeds the dihan-nodes pack (Krea2TwoCharacterPatch / Krea2TwoCharacterEncode)\nplus the four model files listed in group 1.\n\nThe one thing worth knowing up front: the LoRA's two reference slots are not\nequal. Slot A is REPRODUCED near-pixel; slot B is RE-RENDERED into the new\nscene. So A's face tends to arrive on its own and B's is the one that needs\nthe dial - identity_b ships at 4.0 here because that is the strong-likeness\nvalue in the LoRA's model card. identity_a starts at 1.0 (off).\n\nFull reference: docs/KREA2_TWO_CHARACTER.md"
       ],
       "title": "START HERE",
       "color": "#323",

@@ -1,11 +1,13 @@
 """Krea2 two-character identity nodes.
 
 The krea2_edit LoRA takes its reference blocks in a training order of
-`[scene, subject]` — the *last* reference is the one the model treats as the
-subject to preserve, and it is structurally favoured. Feeding two *people* into
-those two slots works (that is what these nodes are for), but the asymmetry is
-still there: the second slot pulls harder, which is why balanced identities
-usually need the last ref's boost set *lower* than the first one's.
+`[scene, subject]`, and the two slots are not interchangeable. The first is
+*reproduced* (near-pixel scene preservation); the last is *re-rendered* into
+that scene, which is the path a likeness actually has to survive and the reason
+the model card's `ref_boost` dial (this file's `identity_b`) exists at all —
+`~4` is its documented strong-likeness value, `1.0` is the dial switched off.
+Feeding two *people* into those slots works (that is what these nodes are for),
+but the asymmetry stays: the two dials do not sit on the same scale.
 
 These nodes keep the reference geometry of comfyui-krea2edit (Apache-2.0,
 https://github.com/lbouaraba/comfyui-krea2edit, vendored from v1.2.5 — the
@@ -287,12 +289,12 @@ class Krea2TwoCharacterPatch:
             "required": {
                 "model": ("MODEL", {"tooltip": "Krea2 UNET with the krea2_edit / krea2 identity LoRA already applied (LoraLoaderModelOnly)"}),
                 "vae": ("VAE", {"tooltip": "used to encode both characters at the exact output resolution — this pixel-space path is what keeps references sharp when the reference and output resolutions differ"}),
-                "character_a": ("IMAGE", {"tooltip": "first character -> reference frame 1 (the LoRA's 'scene' slot)"}),
-                "character_b": ("IMAGE", {"tooltip": "second character -> reference frame 2 (the LoRA's 'subject' slot). This slot is structurally favoured by training, so it usually needs a LOWER identity value than A for the two faces to come out balanced"}),
+                "character_a": ("IMAGE", {"tooltip": "first character -> reference frame 1 (the LoRA's 'scene' slot). The scene slot is reproduced near-literally, so A's likeness largely arrives on its own"}),
+                "character_b": ("IMAGE", {"tooltip": "second character -> reference frame 2 (the LoRA's 'subject' slot). The subject is RE-RENDERED into the scene rather than copied, so B's likeness is the one that needs identity_b turned up — the model card's strong-likeness value for this slot is ~4"}),
                 "identity_a": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1000.0, "step": 0.01, "round": 0.001,
-                                         "tooltip": "multiplies target->character_a attention. 1.0 = off, >1 pulls the output harder toward A's appearance, <1 loosens it"}),
+                                         "tooltip": "multiplies target->character_a attention. Upstream's 'ref_boost_a'. 1.0 = off, >1 pulls the output harder toward A's appearance, <1 loosens it. The model card gives no baseline for this slot because the scene ref is normally left alone; for a second CHARACTER, sweep it up alongside identity_b"}),
                 "identity_b": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1000.0, "step": 0.01, "round": 0.001,
-                                         "tooltip": "same dial for character_b. Because B sits in the favoured last slot, start it below identity_a (e.g. A 1.4 / B 1.0) and tune from there"}),
+                                         "tooltip": "same dial for character_b. This is upstream's 'ref_boost', the fidelity dial the LoRA's model card documents: ~4 is the strong-likeness starting point (the author's own example workflow ships at 4) and >10 starts breaking. 1.0 is OFF, not a baseline — if B's likeness is weak, this is almost always why"}),
                 "fit_mode": (["fit", "crop (legacy)"], {"default": "fit",
                               "tooltip": "how a character image fits a mismatched output aspect ratio: fit = resample to the target grid at a centered offset (matches how the LoRA was trained — use this); crop (legacy) = center-crop to the output AR then resize (v1/v1.1 weights only)"}),
             },
@@ -307,7 +309,7 @@ class Krea2TwoCharacterPatch:
                 "isolate_references": ("BOOLEAN", {"default": False,
                                                    "tooltip": "blind the two reference blocks to each other so they cannot mix before the target reads them. Off by default because full cross-reference attention is what the LoRA was trained with; turn it on when the two faces merge into an average of the pair"}),
                 "swap_reference_order": ("BOOLEAN", {"default": False,
-                                                     "tooltip": "put character_b in frame 1 and character_a in frame 2. The last slot is structurally favoured, so this A/B tests which character benefits from it. identity_a/face_mask_a/region_a keep following character_a. Swap the images on the encode node to match"}),
+                                                     "tooltip": "put character_b in frame 1 and character_a in frame 2, i.e. swap which character sits in the copied 'scene' slot and which is re-rendered as the 'subject'. The dials keep following their own character (identity_a stays with character_a). Swap the images on the encode node to match"}),
             },
         }
 
@@ -340,7 +342,8 @@ class Krea2TwoCharacterPatch:
         px_cache = {}
         state = {"announced": False}
 
-        # slot order: index 0 -> RoPE frame 1, index 1 -> frame 2 (the favoured slot)
+        # slot order: index 0 -> RoPE frame 1 (copied 'scene'), index 1 -> frame 2
+        # (re-rendered 'subject'); matches upstream's [ref_boost_a..., ref_boost]
         slots = [("b", character_b, identity_b, face_mask_b, region_b),
                  ("a", character_a, identity_a, face_mask_a, region_a)] if swap_reference_order else \
                 [("a", character_a, identity_a, face_mask_a, region_a),

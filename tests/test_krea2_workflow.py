@@ -156,11 +156,14 @@ assert enc_p["widgets_values"][1:] == enc_n["widgets_values"][1:], \
 assert enc_p["widgets_values"][0].strip(), "the positive prompt is empty"
 print("6 ok  negative encode is the trained unconditional")
 
-# ships neutral, so a first run reproduces the upstream baseline
+# ships at the model card's documented starting point: identity_b (= upstream's
+# ref_boost) at 4, everything else off
 iv = patch["widgets_values"]
-assert iv[0] == 1.0 and iv[1] == 1.0, "identity dials should ship neutral"
+assert iv[0] == 1.0, "identity_a should ship off (1.0)"
+assert iv[1] == 4.0, ("identity_b should ship at the model card's strong-likeness value "
+                      "(4.0) — 1.0 is the dial off, not a baseline")
 assert iv[2] == "fit" and iv[3] == 0.0 and iv[4] is False and iv[5] is False
-print("7 ok  patch node ships neutral (1.0 / 1.0, fit, no exclusivity, no toggles)")
+print("7 ok  patch node ships A 1.0 / B 4.0, fit, no exclusivity, no toggles")
 
 # the mask group is bypassed and hands nothing to the patch node
 for slot in ("face_mask_a", "face_mask_b", "region_a", "region_b"):

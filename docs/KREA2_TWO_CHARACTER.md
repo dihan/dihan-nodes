@@ -12,12 +12,19 @@ Two nodes for holding **two people's identities** in one Krea 2 in-context edit:
 ## Why these exist
 
 The krea2 identity-edit LoRA takes **two** reference blocks, and it was trained on the
-order `[scene, subject]` — the *last* reference is the one it treats as "the thing to
-preserve". Feeding two *people* into those slots works, but the asymmetry doesn't go
-away: the second slot pulls harder on the output. That is why, on the upstream
-`Krea2EditModelPatch`, balanced identities usually need `ref_boost` (the last ref, i.e.
-`source_image_b`) set **lower** than `ref_boost_a` (the first ref) — the second
-character is already winning before you touch a dial.
+fixed order `[scene, subject]`. The two slots are not interchangeable and they fail in
+different ways:
+
+- **Slot 1 (scene)** is *reproduced*. The LoRA's job there is near-pixel preservation,
+  so if you put a person in it, their face comes along largely for free.
+- **Slot 2 (subject)** is *re-rendered* — re-posed, relit, composited into the scene.
+  That is the path likeness has to survive, and it is the one the model card's
+  `ref_boost` dial exists to strengthen (`~4` for strong likeness).
+
+Feeding two *people* into those slots works, but that asymmetry doesn't go away, and it
+is why the two dials do not live on the same scale. `identity_b` is doing real work at
+`4`; `identity_a` may need much less, because its character was copied rather than
+re-synthesised.
 
 These nodes keep the reference geometry identical to
 [comfyui-krea2edit](https://github.com/lbouaraba/comfyui-krea2edit) v1.2.5 — the
@@ -33,8 +40,9 @@ layer** around the two-character case:
   — A on the left, B on the right — instead of both competing over every pixel.
 - **Reference isolation.** The two reference blocks can be blinded to each other, so
   they can't average into a single face before the target ever reads them.
-- **Order swap.** One toggle moves a character into the favoured last slot, to A/B
-  test which one benefits from it without rewiring the graph.
+- **Order swap.** One toggle exchanges the copied "scene" slot and the re-rendered
+  "subject" slot between the two characters, to A/B test which face survives which
+  path, without rewiring the graph.
 
 Every one of those is off or neutral by default. With just the two images wired, this
 node builds exactly the same sequence as the upstream patch node with
@@ -101,7 +109,7 @@ the same two images. That is what the LoRA's unconditional was trained on.
 | `model` | `MODEL` | — | Krea 2 UNET with the identity-edit LoRA already applied |
 | `vae` | `VAE` | — | encodes both characters at the exact output resolution (the pixel-space path — this is what keeps references sharp when reference and output resolutions differ) |
 | `character_a` | `IMAGE` | — | first character → RoPE frame 1 (the LoRA's "scene" slot) |
-| `character_b` | `IMAGE` | — | second character → RoPE frame 2 (the "subject" slot, structurally favoured) |
+| `character_b` | `IMAGE` | — | second character → RoPE frame 2 (the "subject" slot — re-rendered, not copied, so this is the likeness that needs `identity_b`) |
 | `identity_a` | `FLOAT` | `1.0` | multiplies target→A attention. `1.0` off, `>1` pulls harder toward A's appearance, `<1` loosens |
 | `identity_b` | `FLOAT` | `1.0` | same for B |
 | `fit_mode` | choice | `fit` | how a character image fits a mismatched output aspect ratio. `fit` resamples to the target grid at a centered offset (training-matched — use this); `crop (legacy)` center-crops to the output AR then resizes (v1/v1.1 weights only) |
@@ -175,13 +183,18 @@ both names.
 
 Change one thing at a time; the dials interact.
 
-1. **Baseline.** Both identities at `1.0`, no masks. Prompt describes both characters
-   and where each one is. Generate at **≤ 2 MP** — above the trained range, references
-   start bleeding into the output and subjects duplicate.
-2. **One identity is weak.** Raise that character's dial in `0.1`–`0.2` steps and leave
-   the other at `1.0`. Because B sits in the favoured slot, the balanced pair usually
-   ends up with **A above B** (e.g. A `1.4` / B `1.0`), which is the same asymmetry as
-   upstream's `ref_boost < ref_boost_a`.
+1. **Baseline.** `identity_b` at **`4`**, `identity_a` at `1.0`, no masks. Prompt
+   describes both characters and where each one is. Generate at **1–1.5 MP** (hard cap
+   2 MP) — above that, references bleed, subjects duplicate, and the model card warns
+   the two identities blend into each other.
+
+   `1.0` is the dial being **off**, not a starting point: `identity_b` is upstream's
+   `ref_boost`, and the LoRA's own example workflow ships it at `4`. Starting from `1.0`
+   and creeping up in `0.1` steps is how you end up concluding that B "needs `10`".
+2. **One identity is weak.** Move that character's dial in whole steps (`1 → 2 → 4 → 6`),
+   not in tenths, and leave the other one alone. `identity_b` above ~`10` is where the
+   model card says the edit starts breaking down; if B still isn't there at `10`, the
+   dial is not the problem — go to step 3 or to *When to stop turning dials* below.
 3. **Faces blend into one person.** Add `face_mask_a` and `face_mask_b` so the boost
    targets faces rather than clothes and background. If they still merge, turn on
    `isolate_references`.
@@ -190,8 +203,44 @@ Change one thing at a time; the dials interact.
    Keep the prompt consistent with the masks.
 5. **Output looks pasted-together / too literal.** Both dials below `1.0` loosens the
    copy and lets the model restage the pair.
-6. **Still stuck.** Flip `swap_reference_order` and re-run step 2 — it tests whether the
-   *other* character wants the favoured slot. Swap the images on the encode node to match.
+6. **Still stuck.** Flip `swap_reference_order` and re-run step 2 — it puts the *other*
+   character in the copied scene slot, which is the cheapest way to find out whether a
+   given face is easier to preserve or easier to re-render. Swap the images on the
+   encode node to match.
+
+### Sampling and encode settings that move likeness
+
+These come from the LoRA's model card and apply to these nodes unchanged:
+
+| Setting | For likeness |
+|---|---|
+| `grounding_px` (encode node) | **higher = stronger identity**; lower = stronger edit adherence. Trained range `384–768`, `1024` often still works. Duplicated/"double picture" output means it is too high. |
+| Steps | `8` favours composition, `12` favours face detail, `~10` is the balance. |
+| Resolution | ≤ 2 MP; **1–1.5 MP for two-person**, then upscale. |
+| CFG | `1.0` on Turbo; at CFG > 1 ground the negative too (empty prompt, same images). |
+| LoRA strength | `1.0`. |
+| Sampler | `euler` or another ODE sampler. |
+
+### When to stop turning dials
+
+The model card lists this as a known limitation, not a tuning problem:
+
+> **Two-person inputs keep outfits distinct but faces drift toward each other.**
+> Workaround that works today: chain single-ref inserts (place person A, then a second
+> edit pass adding person B from their reference).
+
+So if `identity_b` at `6`–`10` plus face masks plus regions still gives you a face that
+reads as "a close relative", you have hit the model, not the node. Two escape routes:
+
+- **Chain two passes.** Generate the scene with character A, then run a second pass with
+  that output as `character_a` and B's photo as `character_b`. B is then the only
+  identity being inserted, which is what the LoRA was actually trained to do.
+- **Stack a subject LoRA** for the harder face — the card recommends this for anything
+  the base prior pulls on.
+
+Also worth checking before blaming the dial: `fit_mode`. `fit` geometry and `ref_boost`
+both require the **v1.2** weights. On `v1`/`v1.1` files, use `crop (legacy)` and match
+the source aspect ratio, or preservation degrades for both characters.
 
 Prefer `euler` (or another ODE sampler) over `er_sde`: the SDE noise injection disrupts
 the reference-copy channel.
