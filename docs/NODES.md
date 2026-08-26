@@ -1,6 +1,6 @@
 # Node Documentation
 
-This pack registers four nodes.
+This pack registers six nodes.
 
 | Class | Display name | Category | File |
 |-------|--------------|----------|------|
@@ -8,6 +8,8 @@ This pack registers four nodes.
 | [`FaceDetectionMarker`](#facedetectionmarker) | Face Detection Marker | `FaceAnalysis` | `face_detection_marker.py` |
 | [`FaceGenderDetect`](#facegenderdetect) | Face Gender Detect | `FaceAnalysis` | `face_gender_detect.py` |
 | [`ImageOverlayCompare`](#imageoverlaycompare) | Image Overlay Compare | `image/overlay` | `mask_compare_image.py` |
+| [`Krea2TwoCharacterPatch`](KREA2_TWO_CHARACTER.md) | Krea2 Two-Character Identity (patch) | `dihan-nodes/krea2` | `krea2_two_character.py` |
+| [`Krea2TwoCharacterEncode`](KREA2_TWO_CHARACTER.md) | Krea2 Two-Character Encode | `dihan-nodes/krea2` | `krea2_two_character.py` |
 
 The three `FaceAnalysis` nodes require an `ANALYSIS_MODELS` input supplied by the
 [forked ComfyUI_FaceAnalysis_Advanced](https://github.com/dihan/ComfyUI_FaceAnalysis_Advanced).
@@ -24,6 +26,10 @@ FaceAnalysis package will not work with FaceLineMask's gender mode or with
 FaceGenderDetect.
 
 `ImageOverlayCompare` has no such dependency and works with any images.
+
+The two `krea2` nodes are independent of FaceAnalysis entirely — they need a Krea 2
+model with the identity-edit LoRA, and are documented in
+[KREA2_TWO_CHARACTER.md](KREA2_TWO_CHARACTER.md).
 
 The pack also serves a mobile status dashboard at `/status`; that is a web route, not
 a node, and is documented in the [README](../README.md#mobile-status-page).

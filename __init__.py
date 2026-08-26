@@ -21,4 +21,14 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ImageOverlayCompare": "Image Overlay Compare"
 }
 
-__all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS'] 
+# The Krea2 nodes reach into comfy internals (patcher_extension, ldm.common_dit,
+# the flux timestep embedding). On a ComfyUI too old to have them, load the rest
+# of the pack anyway instead of taking every node down with the import.
+try:
+    from . import krea2_two_character
+    NODE_CLASS_MAPPINGS.update(krea2_two_character.NODE_CLASS_MAPPINGS)
+    NODE_DISPLAY_NAME_MAPPINGS.update(krea2_two_character.NODE_DISPLAY_NAME_MAPPINGS)
+except Exception as e:
+    print(f"[dihan-nodes] Krea2 two-character nodes not loaded: {type(e).__name__}: {e}", flush=True)
+
+__all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']

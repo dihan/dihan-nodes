@@ -66,10 +66,14 @@ If another extension has already claimed `/status`, this pack falls back to
 | `FaceDetectionMarker` | Face Detection Marker | `FaceAnalysis` | `ANALYSIS_MODELS`, `IMAGE` | `IMAGE` |
 | `FaceGenderDetect` | Face Gender Detect | `FaceAnalysis` | `ANALYSIS_MODELS`, `IMAGE` | `IMAGE` |
 | `ImageOverlayCompare` | Image Overlay Compare | `image/overlay` | `IMAGE`, `IMAGE` | *(preview only)* |
+| `Krea2TwoCharacterPatch` | Krea2 Two-Character Identity (patch) | `dihan-nodes/krea2` | `MODEL`, `VAE`, `IMAGE`, `IMAGE` | `MODEL` |
+| `Krea2TwoCharacterEncode` | Krea2 Two-Character Encode | `dihan-nodes/krea2` | `CLIP`, `IMAGE`, `IMAGE` | `CONDITIONING` |
 
 The three `FaceAnalysis` nodes take an `ANALYSIS_MODELS` input from the
 [forked ComfyUI_FaceAnalysis_Advanced](https://github.com/dihan/ComfyUI_FaceAnalysis_Advanced).
-`ImageOverlayCompare` is standalone and works with any images.
+`ImageOverlayCompare` is standalone and works with any images. The two `krea2` nodes
+need a Krea 2 model with the identity-edit LoRA and are documented separately in
+[docs/KREA2_TWO_CHARACTER.md](docs/KREA2_TWO_CHARACTER.md).
 
 See [docs/NODES.md](docs/NODES.md) for the full parameter reference.
 
@@ -190,6 +194,48 @@ luminance as the alpha. Built for eyeballing a mask against the image it came fr
 - Only the first image of a batch is used.
 - Lives under the `image/overlay` category, not `FaceAnalysis`.
 
+### Krea2 Two-Character Identity
+
+Two nodes for keeping **two people's identities** in a single Krea 2 in-context edit —
+one character per reference slot, both faces preserved, in one pass.
+
+The krea2 identity-edit LoRA was trained on the reference order `[scene, subject]`, so
+its *last* reference slot is structurally favoured. Putting two people in those slots
+works, but the second one wins by default — which is why balanced results usually need
+the last slot's boost set lower than the first's. These nodes take that as the starting
+point and add the controls the two-character case actually needs:
+
+- a **face mask per character**, not just for the last reference
+- **soft masks** — a feathered mask ramps the boost instead of hard-gating it
+- **output regions** — route A to the left of the canvas and B to the right, with an
+  exclusivity dial that suppresses each character outside its own region
+- **reference isolation** — stop the two references blending into an average face
+  before the target ever reads them
+- an **order swap** toggle, to test which character wants the favoured slot
+
+Everything is off or neutral by default: with just the two images wired, the sequence is
+identical to the upstream `Krea2EditModelPatch` with `source_image` / `source_image_b`.
+
+```
+UNETLoader ──► LoraLoaderModelOnly ──┐
+                                     ▼
+LoadImage (character A) ────────► Krea2TwoCharacterPatch ──► KSampler.model
+LoadImage (character B) ────────►   ▲          ▲
+VAELoader ──────────────────────────┘          │
+EmptySD3LatentImage ──┬── target_latent ───────┘
+                      └──────────────────────────► KSampler.latent_image
+
+CLIPLoader ──► Krea2TwoCharacterEncode(prompt, A, B) ──► KSampler.positive
+```
+
+Needs the Krea 2 UNET plus the identity-edit LoRA
+([weights](https://huggingface.co/conradlocke/krea2-identity-edit)) and the native
+Krea 2 `qwen3vl` CLIP. `comfyui-krea2edit` is *not* required — but don't stack its patch
+node and this one on the same model.
+
+Full parameter reference, tuning recipe and a socket-by-socket migration table from
+`comfyui-krea2edit`: [docs/KREA2_TWO_CHARACTER.md](docs/KREA2_TWO_CHARACTER.md).
+
 ## Installation
 
 1. Clone this repository into your ComfyUI custom_nodes directory:
@@ -242,6 +288,11 @@ git clone [repository-url] dihan-nodes
   - torch
   - numpy
   - PIL
+  - einops (Krea2 nodes only)
+
+The Krea2 nodes additionally need a ComfyUI new enough to have `comfy.patcher_extension`
+and Krea 2 support. On an older build they are skipped with a console note and the rest
+of the pack still loads.
 
 ## Contributing
 
