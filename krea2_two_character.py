@@ -353,6 +353,23 @@ class Krea2TwoCharacterPatch:
             print(f"{LOG} WARNING: region_exclusivity={region_exclusivity} has NO EFFECT — "
                   f"it needs region_a and/or region_b connected.", flush=True)
 
+        # An all-zero MASK is the easy mistake here (a LoadImage whose mask was never
+        # painted hands one over), and it fails silently in opposite directions
+        # depending on which socket it landed on.
+        for label, msk in (("face_mask_a", face_mask_a), ("face_mask_b", face_mask_b)):
+            if msk is not None and float(msk.max()) <= 0.0:
+                print(f"{LOG} WARNING: '{label}' is empty (all zero), which disables "
+                      f"identity_{label[-1]} entirely — every reference token gets a boost of "
+                      f"1.0. Paint the mask, or disconnect it to boost the whole image.",
+                      flush=True)
+        for label, msk in (("region_a", region_a), ("region_b", region_b)):
+            if msk is not None and float(msk.max()) <= 0.0:
+                print(f"{LOG} WARNING: '{label}' is empty (all zero) — character "
+                      f"{label[-1].upper()} has no region to drive"
+                      + (f", and region_exclusivity={region_exclusivity} will suppress it "
+                         f"across the whole canvas." if region_exclusivity > 0 else "."),
+                      flush=True)
+
         # Pre-encode outside the sampling window. vae.encode -> load_models_gpu ->
         # free_memory(keep_loaded=[]) partially unloads whatever is resident, the
         # diffusion model included, and nothing re-expands it mid-run.

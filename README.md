@@ -228,6 +228,12 @@ EmptySD3LatentImage ──┬── target_latent ───────┘
 CLIPLoader ──► Krea2TwoCharacterEncode(prompt, A, B) ──► KSampler.positive
 ```
 
+A ready-made graph ships with the pack:
+**[`workflow/Krea2 Two-Character Identity.json`](workflow/Krea2%20Two-Character%20Identity.json)**
+— drag it onto the canvas, load a photo of each character, write the scene, Run. It
+starts at the neutral baseline and every group on the canvas carries a note on what to
+change next.
+
 Needs the Krea 2 UNET plus the identity-edit LoRA
 ([weights](https://huggingface.co/conradlocke/krea2-identity-edit)) and the native
 Krea 2 `qwen3vl` CLIP. `comfyui-krea2edit` is *not* required — but don't stack its patch

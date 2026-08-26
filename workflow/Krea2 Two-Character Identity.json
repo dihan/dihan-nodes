@@ -1,0 +1,1176 @@
+{
+  "id": "3a7c9f10-2c4e-4d61-9b0a-krea2twochar",
+  "revision": 0,
+  "last_node_id": 23,
+  "last_link_id": 21,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "UNETLoader",
+      "pos": [
+        60,
+        -150
+      ],
+      "size": [
+        470,
+        130
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            1
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.26.0",
+        "models": [
+          {
+            "name": "krea2_turbo_fp8_scaled.safetensors",
+            "url": "https://huggingface.co/Comfy-Org/Krea-2/resolve/main/diffusion_models/krea2_turbo_fp8_scaled.safetensors",
+            "directory": "diffusion_models"
+          }
+        ],
+        "Node name for S&R": "UNETLoader"
+      },
+      "widgets_values": [
+        "krea2_turbo_fp8_scaled.safetensors",
+        "default"
+      ]
+    },
+    {
+      "id": 2,
+      "type": "LoraLoaderModelOnly",
+      "pos": [
+        60,
+        20
+      ],
+      "size": [
+        470,
+        120
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            2
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.26.0",
+        "Node name for S&R": "LoraLoaderModelOnly"
+      },
+      "widgets_values": [
+        "Krea2/krea2_identity_edit_v1_2.safetensors",
+        1
+      ]
+    },
+    {
+      "id": 3,
+      "type": "CLIPLoader",
+      "pos": [
+        60,
+        190
+      ],
+      "size": [
+        470,
+        140
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            5,
+            6
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.26.0",
+        "models": [
+          {
+            "name": "qwen3vl_4b_fp8_scaled.safetensors",
+            "url": "https://huggingface.co/Comfy-Org/Krea-2/resolve/main/text_encoders/qwen3vl_4b_fp8_scaled.safetensors",
+            "directory": "text_encoders"
+          }
+        ],
+        "Node name for S&R": "CLIPLoader"
+      },
+      "widgets_values": [
+        "qwen3vl_4b_fp8_scaled.safetensors",
+        "krea2",
+        "default"
+      ]
+    },
+    {
+      "id": 4,
+      "type": "VAELoader",
+      "pos": [
+        60,
+        380
+      ],
+      "size": [
+        470,
+        90
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            3,
+            4
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.26.0",
+        "models": [
+          {
+            "name": "qwen_image_vae.safetensors",
+            "url": "https://huggingface.co/Comfy-Org/Krea-2/resolve/main/vae/qwen_image_vae.safetensors",
+            "directory": "vae"
+          }
+        ],
+        "Node name for S&R": "VAELoader"
+      },
+      "widgets_values": [
+        "qwen_image_vae.safetensors"
+      ]
+    },
+    {
+      "id": 5,
+      "type": "Note",
+      "pos": [
+        60,
+        520
+      ],
+      "size": [
+        470,
+        210
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "Note"
+      },
+      "widgets_values": [
+        "Four files, all auto-downloadable from the links on the loader nodes:\n\n- krea2_turbo_fp8_scaled  (diffusion_models)\n- qwen3vl_4b_fp8_scaled  (text_encoders) - type must be 'krea2'.\n  The vision tower matters: the encode node feeds both faces through it.\n- qwen_image_vae  (vae)\n- krea2_identity_edit_v1_2.safetensors  (loras)\n  from huggingface.co/conradlocke/krea2-identity-edit\n\nThe LoRA is what these nodes patch. Without it you get a plain Krea 2 render."
+      ],
+      "title": "Model files",
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 6,
+      "type": "LoadImage",
+      "pos": [
+        620,
+        -150
+      ],
+      "size": [
+        450,
+        400
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            7,
+            9,
+            11
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.26.0",
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "character_a.png",
+        "image"
+      ],
+      "title": "character A"
+    },
+    {
+      "id": 7,
+      "type": "LoadImage",
+      "pos": [
+        620,
+        300
+      ],
+      "size": [
+        450,
+        400
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            8,
+            10,
+            12
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.26.0",
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "character_b.png",
+        "image"
+      ],
+      "title": "character B"
+    },
+    {
+      "id": 8,
+      "type": "Note",
+      "pos": [
+        620,
+        740
+      ],
+      "size": [
+        450,
+        250
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "Note"
+      },
+      "widgets_values": [
+        "One clear photo per character. Head-and-shoulders or half-body reads best;\na tiny face in a wide shot has few reference tokens to give.\n\nBoth faces are placed in a SINGLE pass. Chaining two single-character edits\nis less reliable - the second pass tends to re-render the first face.\n\nThe B slot is the LoRA's 'subject' slot and pulls harder on the output.\nThat asymmetry is why identity_a usually ends up ABOVE identity_b.\n\nWire the same images, in the same order, into the encode node."
+      ],
+      "title": "Two people, one pass",
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 9,
+      "type": "Krea2TwoCharacterEncode",
+      "pos": [
+        1140,
+        -150
+      ],
+      "size": [
+        520,
+        330
+      ],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 5
+        },
+        {
+          "name": "character_a",
+          "type": "IMAGE",
+          "link": 7
+        },
+        {
+          "name": "character_b",
+          "type": "IMAGE",
+          "link": 8
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            16
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Krea2TwoCharacterEncode"
+      },
+      "widgets_values": [
+        "Ada and Ben shaking hands in a sunlit office, Ada on the left, Ben on the right, both looking at the camera",
+        "Ada",
+        "Ben",
+        768,
+        ""
+      ],
+      "title": "positive"
+    },
+    {
+      "id": 10,
+      "type": "Krea2TwoCharacterEncode",
+      "pos": [
+        1140,
+        230
+      ],
+      "size": [
+        520,
+        250
+      ],
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 6
+        },
+        {
+          "name": "character_a",
+          "type": "IMAGE",
+          "link": 9
+        },
+        {
+          "name": "character_b",
+          "type": "IMAGE",
+          "link": 10
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            17
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Krea2TwoCharacterEncode"
+      },
+      "widgets_values": [
+        "",
+        "Ada",
+        "Ben",
+        768,
+        ""
+      ],
+      "title": "negative (leave the prompt empty)"
+    },
+    {
+      "id": 11,
+      "type": "Note",
+      "pos": [
+        1140,
+        530
+      ],
+      "size": [
+        520,
+        460
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "Note"
+      },
+      "widgets_values": [
+        "Describe the SCENE you want, not the photos you fed in.\n\nname_a / name_b put 'This is Ada.' next to each image inside the prompt the\nvision encoder sees, so 'Ada on the left' binds to a specific face instead\nof the model guessing. Clear both names to get the exact template the LoRA\nwas trained on.\n\nSay where each person is, and keep it consistent with the region masks in\ngroup 5 if you enable them.\n\nThe negative node is the trained unconditional: EMPTY prompt, same two\nimages, same names. It only matters at CFG > 1 - the turbo model runs at\nCFG 1, where the negative is ignored and you can bypass this node.\n\ngrounding_px 768 is in-distribution (the LoRA trained on 384-768). Dropping\nto ~512 loosens the grip on the reference photos."
+      ],
+      "title": "Writing the instruction",
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 12,
+      "type": "Krea2TwoCharacterPatch",
+      "pos": [
+        1730,
+        -150
+      ],
+      "size": [
+        450,
+        400
+      ],
+      "flags": {},
+      "order": 18,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 2
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 3
+        },
+        {
+          "name": "character_a",
+          "type": "IMAGE",
+          "link": 11
+        },
+        {
+          "name": "character_b",
+          "type": "IMAGE",
+          "link": 12
+        },
+        {
+          "name": "target_latent",
+          "type": "LATENT",
+          "link": 13,
+          "shape": 7
+        },
+        {
+          "name": "face_mask_a",
+          "type": "MASK",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "face_mask_b",
+          "type": "MASK",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "region_a",
+          "type": "MASK",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "region_b",
+          "type": "MASK",
+          "link": null,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            15
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Krea2TwoCharacterPatch"
+      },
+      "widgets_values": [
+        1.0,
+        1.0,
+        "fit",
+        0.0,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 13,
+      "type": "Note",
+      "pos": [
+        1730,
+        600
+      ],
+      "size": [
+        450,
+        560
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "Note"
+      },
+      "widgets_values": [
+        "Change ONE thing at a time. The dials interact.\n\n1. Start where it is: both identities 1.0, no masks, <= 2 MP.\n\n2. One face is weak -> raise THAT dial in 0.1-0.2 steps, leave the other at\n   1.0. Balanced pairs usually land with A above B (e.g. 1.4 / 1.0).\n\n3. The two faces blend into one person -> paint a face mask per character\n   (group 5) so the boost targets faces, not clothes and background.\n   Still blending -> isolate_references on.\n\n4. Faces swap sides, or both come out as the same person -> enable the\n   region masks (group 5) and set region_exclusivity 0.5-0.8.\n\n5. Result looks pasted together -> both dials BELOW 1.0.\n\n6. Stuck -> swap_reference_order on, then redo step 2. It tests whether the\n   other character wants the favoured slot. Swap the images on the encode\n   node to match.\n\nAny dial off-neutral builds an L x L attention bias: slower, and a few\nhundred MB at ~1 MP. At 1.0 / 1.0 with nothing wired, it costs nothing."
+      ],
+      "title": "Tuning, in order",
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 14,
+      "type": "LoadImage",
+      "pos": [
+        620,
+        1040
+      ],
+      "size": [
+        450,
+        400
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 4,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            20
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.26.0",
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "region_split.png",
+        "image"
+      ],
+      "title": "region split (white = A's half)"
+    },
+    {
+      "id": 15,
+      "type": "ImageToMask",
+      "pos": [
+        1140,
+        1040
+      ],
+      "size": [
+        300,
+        90
+      ],
+      "flags": {},
+      "order": 17,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 20
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": [
+            21
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.26.0",
+        "Node name for S&R": "ImageToMask"
+      },
+      "widgets_values": [
+        "red"
+      ],
+      "title": "region_a"
+    },
+    {
+      "id": 16,
+      "type": "InvertMask",
+      "pos": [
+        1140,
+        1180
+      ],
+      "size": [
+        300,
+        60
+      ],
+      "flags": {},
+      "order": 19,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "mask",
+          "type": "MASK",
+          "link": 21
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.26.0",
+        "Node name for S&R": "InvertMask"
+      },
+      "widgets_values": [],
+      "title": "region_b"
+    },
+    {
+      "id": 17,
+      "type": "Note",
+      "pos": [
+        1490,
+        1040
+      ],
+      "size": [
+        690,
+        470
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "Note"
+      },
+      "widgets_values": [
+        "FACE MASKS - which part of a character's PHOTO the identity dial applies to.\nRight-click the character's LoadImage -> Open in MaskEditor, paint the face,\nthen drag its MASK output to face_mask_a / face_mask_b. Feather the edge:\nsoft masks ramp the boost instead of hard-gating it.\nAn all-black mask silently turns that dial off - the node warns in the log.\n\nREGION MASKS - which part of the OUTPUT each character is allowed to drive.\nLoad one black-and-white split image (white = A's side), ImageToMask gives\nregion_a and InvertMask gives region_b. Rough halves are enough. Wire them\nto region_a / region_b, then raise region_exclusivity to 0.5-0.8 to actually\nsuppress each character outside its own side. At 0.0 the regions only\namplify and nothing is held apart.\n\nKeep the regions and the prompt agreeing with each other - masks that say\nleft/right while the prompt says the opposite fight, and the prompt wins.\n\nSelect these three nodes and press Ctrl+B to un-bypass them."
+      ],
+      "title": "5 - Masks (bypassed - Ctrl+B to enable)",
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 18,
+      "type": "EmptySD3LatentImage",
+      "pos": [
+        2240,
+        -150
+      ],
+      "size": [
+        330,
+        120
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            13,
+            14
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.26.0",
+        "Node name for S&R": "EmptySD3LatentImage"
+      },
+      "widgets_values": [
+        1024,
+        1024,
+        1
+      ]
+    },
+    {
+      "id": 19,
+      "type": "KSampler",
+      "pos": [
+        2240,
+        20
+      ],
+      "size": [
+        330,
+        300
+      ],
+      "flags": {},
+      "order": 20,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 15
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 16
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 17
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 14
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            18
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.26.0",
+        "Node name for S&R": "KSampler"
+      },
+      "widgets_values": [
+        0,
+        "randomize",
+        10,
+        1,
+        "euler",
+        "simple",
+        1
+      ]
+    },
+    {
+      "id": 20,
+      "type": "VAEDecode",
+      "pos": [
+        2240,
+        370
+      ],
+      "size": [
+        330,
+        50
+      ],
+      "flags": {},
+      "order": 21,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 18
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 4
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            19
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.26.0",
+        "Node name for S&R": "VAEDecode"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 21,
+      "type": "SaveImage",
+      "pos": [
+        2630,
+        -150
+      ],
+      "size": [
+        600,
+        640
+      ],
+      "flags": {},
+      "order": 22,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 19
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.26.0",
+        "Node name for S&R": "SaveImage"
+      },
+      "widgets_values": [
+        "krea2_two_character"
+      ]
+    },
+    {
+      "id": 22,
+      "type": "Note",
+      "pos": [
+        2240,
+        460
+      ],
+      "size": [
+        330,
+        560
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "Note"
+      },
+      "widgets_values": [
+        "Settings above are for the TURBO model: 10 steps, CFG 1, euler/simple.\n\nOn raw krea2_raw_bf16 instead: ~28 steps, CFG ~4, and the negative encode\nnode starts mattering.\n\nPrefer euler or another ODE sampler. er_sde injects noise that disrupts the\nreference-copy channel the whole method runs on.\n\nGenerate at 2 MP or less. Above the LoRA's trained range the references\nstart bleeding into the output and people duplicate.\n\ntarget_latent is wired from the same EmptySD3LatentImage that feeds the\nsampler. That is not decoration: it moves the VAE encode of both faces to\nnode-execution time. Without it the encode happens on the first sampling\nstep, where ComfyUI can evict part of the diffusion model to make room and\nleave the rest of the run streaming weights from CPU.\n\nLock the seed once something works, then change one dial at a time."
+      ],
+      "title": "Sampling",
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 23,
+      "type": "Note",
+      "pos": [
+        60,
+        -560
+      ],
+      "size": [
+        1600,
+        370
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "Note"
+      },
+      "widgets_values": [
+        "KREA 2 - TWO-CHARACTER IDENTITY\n==============================\n\nTwo people, both faces preserved, one pass. Load a photo of each character\nin group 2, write the scene in group 3, hit Run. Everything else is tuning.\n\nNeeds the dihan-nodes pack (Krea2TwoCharacterPatch / Krea2TwoCharacterEncode)\nplus the four model files listed in group 1.\n\nThe one thing worth knowing up front: the LoRA's two reference slots are not\nequal. Character B sits in the slot the model was trained to treat as 'the\nsubject to preserve', so it pulls harder. If one face is winning, that is\nwhy - and identity_a / identity_b in group 4 are how you even it out.\n\nFull reference: docs/KREA2_TWO_CHARACTER.md"
+      ],
+      "title": "START HERE",
+      "color": "#323",
+      "bgcolor": "#535"
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      2,
+      0,
+      "MODEL"
+    ],
+    [
+      2,
+      2,
+      0,
+      12,
+      0,
+      "MODEL"
+    ],
+    [
+      3,
+      4,
+      0,
+      12,
+      1,
+      "VAE"
+    ],
+    [
+      4,
+      4,
+      0,
+      20,
+      1,
+      "VAE"
+    ],
+    [
+      5,
+      3,
+      0,
+      9,
+      0,
+      "CLIP"
+    ],
+    [
+      6,
+      3,
+      0,
+      10,
+      0,
+      "CLIP"
+    ],
+    [
+      7,
+      6,
+      0,
+      9,
+      1,
+      "IMAGE"
+    ],
+    [
+      8,
+      7,
+      0,
+      9,
+      2,
+      "IMAGE"
+    ],
+    [
+      9,
+      6,
+      0,
+      10,
+      1,
+      "IMAGE"
+    ],
+    [
+      10,
+      7,
+      0,
+      10,
+      2,
+      "IMAGE"
+    ],
+    [
+      11,
+      6,
+      0,
+      12,
+      2,
+      "IMAGE"
+    ],
+    [
+      12,
+      7,
+      0,
+      12,
+      3,
+      "IMAGE"
+    ],
+    [
+      13,
+      18,
+      0,
+      12,
+      4,
+      "LATENT"
+    ],
+    [
+      14,
+      18,
+      0,
+      19,
+      3,
+      "LATENT"
+    ],
+    [
+      15,
+      12,
+      0,
+      19,
+      0,
+      "MODEL"
+    ],
+    [
+      16,
+      9,
+      0,
+      19,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      17,
+      10,
+      0,
+      19,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      18,
+      19,
+      0,
+      20,
+      0,
+      "LATENT"
+    ],
+    [
+      19,
+      20,
+      0,
+      21,
+      0,
+      "IMAGE"
+    ],
+    [
+      20,
+      14,
+      0,
+      15,
+      0,
+      "IMAGE"
+    ],
+    [
+      21,
+      15,
+      0,
+      16,
+      0,
+      "MASK"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "1 - MODELS",
+      "bounding": [
+        40,
+        -180,
+        510,
+        930
+      ],
+      "color": "#3f789e",
+      "flags": {}
+    },
+    {
+      "id": 2,
+      "title": "2 - CHARACTERS",
+      "bounding": [
+        600,
+        -180,
+        490,
+        1190
+      ],
+      "color": "#3f789e",
+      "flags": {}
+    },
+    {
+      "id": 3,
+      "title": "3 - INSTRUCTION",
+      "bounding": [
+        1120,
+        -180,
+        560,
+        1190
+      ],
+      "color": "#3f789e",
+      "flags": {}
+    },
+    {
+      "id": 4,
+      "title": "4 - IDENTITY",
+      "bounding": [
+        1710,
+        -180,
+        490,
+        1350
+      ],
+      "color": "#a1309b",
+      "flags": {}
+    },
+    {
+      "id": 5,
+      "title": "5 - MASKS (bypassed)",
+      "bounding": [
+        600,
+        1010,
+        1600,
+        520
+      ],
+      "color": "#88A",
+      "flags": {}
+    },
+    {
+      "id": 6,
+      "title": "6 - GENERATE",
+      "bounding": [
+        2220,
+        -180,
+        1030,
+        1250
+      ],
+      "color": "#3f789e",
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.55,
+      "offset": [
+        120,
+        640
+      ]
+    }
+  },
+  "version": 0.4
+}
