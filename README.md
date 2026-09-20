@@ -58,6 +58,48 @@ The page is driven by two small JSON endpoints, usable on their own:
 If another extension has already claimed `/status`, this pack falls back to
 `/dihan-status` instead of colliding.
 
+## MiniMax H3 Generator Page
+
+A focused front end for the MiniMax H3 Ref2VA chain at **`/mmh3`** on the same port
+(`http://<your-ip>:8189/mmh3`), so a multi-segment video can be generated without the
+canvas. It covers reference images (pick or upload), shared prompt blocks plus one shot
+prompt per segment (1–6), resolution and length, LoRAs (add, remove, strength, on/off),
+continuing a chain from a saved latent, and the SeedVR2 upscale with an on/off switch.
+Finished runs show their videos inline, with "Load settings" and "Keep seeds" to repeat
+or tweak one.
+
+Picking a ratio locks it: type one side and the other follows, both rounded by the Snap
+control (Off / 8 / 16 / 32 / 64, the same set and rounding as Resolution Pixaroma).
+"Free" unlocks the two fields. H3 encodes in 16-pixel blocks, so the page says so when a
+size is not a multiple of 16.
+
+Each segment's mp4 appears under Runs as soon as that segment is sampled, before the
+next one starts, with a Stop button beside it — so a bad segment can be caught without
+waiting for the joined video and the upscale. Segments already written stay on disk.
+Tick **Save a latent after every segment** in the Chain card and a stopped run can still
+be continued from its last finished segment; leave it off and only the final segment is
+a continuation point.
+
+The page is built for a phone as much as a desktop: one column under 920px, no
+horizontal scrolling at any width (checked down to 320px), 16px fields so iOS does not
+zoom on focus, and 44px tap targets. Every card folds to its title bar — tap the header
+— and each prompt block and segment folds to a one-line preview, so a long shot list
+stays navigable. What is folded is remembered per device. Segment prompts start tall and
+grow with their content.
+
+Deleting is there too: **Delete all latents** in the Chain card clears every saved chain
+latent and resets the chain to fresh, and each run has **Delete videos** (joined,
+upscaled and per-segment mp4s at once, then the run leaves the list) with a `delete` link
+under any single clip. Both confirm first. Only files this pack wrote are matched -- a
+chain folder you also keep other work in survives the clear -- and a delete outside
+ComfyUI's output or temp folder is refused.
+
+The graph is built by `mmh3_builder.py` and queued through ComfyUI's own `/prompt`,
+so it needs the nodes the original workflow used: MiniMax H3 (core),
+comfyui-h3-motion-context, ComfyUI-Pixaroma (image loader, join, Save MP4, Free VRAM)
+and ComfyUI-SeedVR2_VideoUpscaler. The last-used form is saved in
+`.state/mmh3_settings.json`, so it is shared between devices.
+
 ## Available Nodes
 
 | Node | Display name | Category | Inputs | Outputs |

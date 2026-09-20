@@ -1,0 +1,1192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#0f1115">
+<title>MiniMax H3</title>
+<style>
+  :root {
+    --bg: #0e1014; --bg2: #12151c; --card: #171a21; --card2: #1b1f28;
+    --line: #262b36; --line2: #323848; --text: #e6e8ee; --muted: #8b91a4;
+    --accent: #4f8cff; --accent2: #7aa8ff; --good: #35c27a; --warn: #f0a93b;
+    --bad: #e5484d; --track: #22262f; --field: #11141a;
+    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 24px -12px rgba(0,0,0,.6);
+    --r: 14px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f2f4f8; --bg2: #ffffff; --card: #ffffff; --card2: #fbfcfe;
+      --line: #e3e6ee; --line2: #d3d8e4; --text: #141821; --muted: #616a7e;
+      --track: #eaedf4; --field: #f7f9fc;
+      --shadow: 0 1px 2px rgba(16,24,40,.06), 0 10px 24px -14px rgba(16,24,40,.25);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { max-width: 100%; overflow-x: hidden; }
+  body {
+    margin: 0; padding: 0 12px calc(104px + env(safe-area-inset-bottom));
+    background:
+      radial-gradient(900px 500px at 15% -10%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 70%),
+      var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 14px; }
+  @media (min-width: 920px) {
+    .cols { display: grid; grid-template-columns: 1.3fr 1fr; gap: 14px; align-items: start; }
+    .cols > div { display: grid; gap: 14px; align-content: start; }
+  }
+  @media (max-width: 919px) { .cols, .cols > div { display: grid; gap: 14px; } }
+
+  /* ---------------------------------------------------------- header */
+  header {
+    position: sticky; top: 0; z-index: 4; margin: 0 -12px; padding: 10px 12px;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    backdrop-filter: blur(12px) saturate(140%);
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  }
+  header h1 {
+    font-size: 16px; margin: 0; font-weight: 680; letter-spacing: -0.015em;
+    display: flex; align-items: center; gap: 8px;
+  }
+  header h1 .mark {
+    width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center;
+    background: linear-gradient(145deg, var(--accent), #8b5cf6); color: #fff;
+    font-size: 11px; font-weight: 800; letter-spacing: -0.04em;
+  }
+  header a {
+    color: var(--muted); font-size: 12px; text-decoration: none;
+    padding: 4px 8px; border-radius: 8px;
+  }
+  header a:hover { color: var(--text); background: var(--track); }
+  .pill {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 11px; border-radius: 999px; font-size: 12px; font-weight: 600;
+    background: var(--track); color: var(--muted); white-space: nowrap;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .pill.running { color: var(--accent); }
+  .pill.running .dot { animation: pulse 1.1s ease-in-out infinite; }
+  .pill.idle { color: var(--good); }
+  .pill.offline { color: var(--bad); }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
+
+  /* ---------------------------------------------------------- cards */
+  .card {
+    background: linear-gradient(180deg, var(--card2), var(--card));
+    border: 1px solid var(--line); border-radius: var(--r); padding: 6px 14px 14px;
+    min-width: 0; box-shadow: var(--shadow);
+  }
+  .card > h2 {
+    margin: 0 -14px 12px; padding: 12px 14px; font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; gap: 8px; min-height: 44px;
+    text-transform: uppercase; letter-spacing: .07em; color: var(--muted);
+    cursor: pointer; user-select: none; border-bottom: 1px solid transparent;
+  }
+  .card > h2:hover { color: var(--text); }
+  .card > h2 .right {
+    margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500;
+    display: flex; align-items: center; gap: 6px; min-width: 0;
+  }
+  .card > h2 .right .muted, .card > h2 .right span { overflow: hidden; text-overflow: ellipsis; }
+  .chev {
+    width: 16px; flex: none; color: var(--muted); font-size: 10px;
+    transition: transform .18s ease;
+  }
+  .card.collapsed > h2 { margin-bottom: 0; border-bottom-color: transparent; }
+  .card.collapsed > h2 .chev { transform: rotate(-90deg); }
+  .card.collapsed > :not(h2) { display: none !important; }
+  .card.collapsed { padding-bottom: 0; }
+  .hint { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
+  .muted { color: var(--muted); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .stack { display: grid; gap: 10px; }
+
+  /* ---------------------------------------------------------- fields */
+  label.f { display: grid; gap: 5px; font-size: 12px; color: var(--muted); min-width: 0; }
+  input, select, textarea {
+    font: inherit; font-size: 14px; color: var(--text); background: var(--field);
+    border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px;
+    width: 100%; min-width: 0; transition: border-color .15s ease, background .15s ease;
+  }
+  /* 16px stops iOS zooming the page when a field takes focus */
+  @media (max-width: 760px) { input, select, textarea { font-size: 16px; } }
+  input:hover, select:hover, textarea:hover { border-color: var(--line2); }
+  textarea { resize: vertical; min-height: 72px; line-height: 1.5; }
+  input:focus, select:focus, textarea:focus {
+    outline: none; border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+  input[type=checkbox] {
+    width: 18px; height: 18px; flex: none; accent-color: var(--accent); border-radius: 5px;
+  }
+  input[type=range] { padding: 0; accent-color: var(--accent); background: none; border: 0; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  @media (max-width: 520px) { .grid3 { grid-template-columns: 1fr 1fr; } }
+
+  button {
+    font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+    border: 1px solid var(--line); background: var(--track); color: var(--text);
+    border-radius: 10px; padding: 8px 13px; min-height: 38px; white-space: nowrap;
+    transition: border-color .15s ease, background .15s ease, transform .1s ease;
+  }
+  button:hover { border-color: var(--line2); }
+  button:active { transform: translateY(1px); }
+  button:disabled { opacity: .45; cursor: default; transform: none; }
+  button.primary {
+    background: linear-gradient(180deg, var(--accent2), var(--accent));
+    border-color: color-mix(in srgb, var(--accent) 70%, #000); color: #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,.2);
+  }
+  button.danger { color: var(--bad); }
+  button.ghost {
+    background: none; border-color: transparent; color: var(--muted);
+    padding: 6px 8px; min-height: 32px;
+  }
+  button.ghost:hover { color: var(--text); background: var(--track); }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .row .grow { flex: 1; min-width: 0; }
+  .switch {
+    display: inline-flex; align-items: center; gap: 8px; font-size: 13px;
+    color: var(--text); cursor: pointer; user-select: none; min-height: 32px;
+  }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; background: none; color: var(--muted); padding: 5px 11px; min-height: 32px; }
+  .seg button.on { background: var(--track); color: var(--text); }
+
+  /* ---------------------------------------------------------- references */
+  .refs { display: grid; grid-template-columns: repeat(auto-fill, minmax(116px, 1fr)); gap: 10px; }
+  .ref {
+    border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+    background: var(--field); display: grid; grid-template-rows: auto auto auto; min-width: 0;
+  }
+  .ref .thumb {
+    aspect-ratio: 3/4; background: var(--track) center/cover no-repeat; cursor: pointer;
+    display: grid; place-items: center; color: var(--muted); font-size: 12px;
+  }
+  .ref .meta { padding: 7px 9px; display: grid; gap: 2px; min-width: 0; }
+  .ref .meta b { font-size: 12px; }
+  .ref .meta span { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ref .acts { display: flex; border-top: 1px solid var(--line); }
+  .ref .acts button {
+    flex: 1; border: 0; border-radius: 0; background: none; font-size: 12px;
+    padding: 8px 0; min-height: 36px; color: var(--muted);
+  }
+  .ref .acts button + button { border-left: 1px solid var(--line); }
+  .ref.add {
+    place-items: center; min-height: 170px; border-style: dashed; cursor: pointer;
+    color: var(--muted); grid-template-rows: none;
+  }
+  .ref.add:hover { border-color: var(--accent); color: var(--text); }
+
+  /* ---------------------------------------------------------- blocks / segments */
+  .item {
+    border: 1px solid var(--line); border-radius: 12px; padding: 11px;
+    display: grid; gap: 9px; background: var(--field);
+  }
+  .item.off { opacity: .55; }
+  .item.fold { gap: 0; }
+  .item .peek {
+    font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; padding-top: 2px;
+  }
+  .item .head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .item .head input.label {
+    border: 0; background: none; padding: 3px 0; font-weight: 600; flex: 1 1 120px;
+    min-width: 0; width: auto;
+  }
+  .item .head input.label:focus { box-shadow: none; border-bottom: 1px solid var(--accent); border-radius: 0; }
+  .item textarea.shot { min-height: 190px; }
+  .tag { font-size: 11px; font-weight: 700; color: var(--accent); letter-spacing: .05em; white-space: nowrap; }
+  .seg-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+  .seg-meta input.seed { flex: 1 1 130px; width: auto; min-width: 0; padding: 6px 9px; font-size: 13px; }
+  .seg-meta .note { flex: 1 1 100%; }
+  @media (min-width: 520px) { .seg-meta .note { flex: 0 1 auto; } }
+
+  /* ---------------------------------------------------------- loras */
+  .lora {
+    display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 8px;
+    align-items: center; padding: 10px 0; border-top: 1px solid var(--line);
+  }
+  .lora:first-child { border-top: 0; padding-top: 0; }
+  .lora .str { grid-column: 2 / 4; display: grid; grid-template-columns: minmax(0,1fr) 68px; gap: 10px; align-items: center; }
+  .lora .str input[type=number] { padding: 5px 7px; text-align: center; }
+  .lora.off select, .lora.off .str { opacity: .5; }
+
+  /* ---------------------------------------------------------- runs */
+  .run { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; display: grid; gap: 10px; }
+  .run:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+  .run .head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; }
+  .run .head .mono { overflow-wrap: anywhere; }
+  .badge {
+    padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700;
+    background: var(--track); color: var(--muted); text-transform: uppercase; letter-spacing: .04em;
+  }
+  .badge.good { color: var(--good); } .badge.bad { color: var(--bad); }
+  .badge.run { color: var(--accent); }
+  .vids { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .vid { display: grid; gap: 5px; min-width: 0; }
+  .vid video { width: 100%; border-radius: 10px; background: #000; max-height: 420px; display: block; }
+  .vid .cap { font-size: 11px; color: var(--muted); display: flex; gap: 8px; align-items: center; min-width: 0; }
+  .vid .cap > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vid .cap a { color: var(--muted); text-decoration: none; }
+  .vid .cap a:first-of-type { margin-left: auto; }
+  .vid .cap a:hover { color: var(--text); }
+  .vid.main { grid-column: 1 / -1; }
+  .vid.main video { max-height: 70vh; }
+  .err {
+    color: var(--bad); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere;
+    background: color-mix(in srgb, var(--bad) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--bad) 30%, transparent);
+    border-radius: 10px; padding: 9px 11px;
+  }
+
+  /* ---------------------------------------------------------- dock */
+  .dock {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+    background: color-mix(in srgb, var(--card) 88%, transparent);
+    backdrop-filter: blur(14px) saturate(140%);
+    border-top: 1px solid var(--line);
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  }
+  .dock .in { max-width: 1040px; margin: 0 auto; display: flex; align-items: center; gap: 10px; }
+  .dock .prog { flex: 1; min-width: 0; display: grid; gap: 5px; }
+  .dock .txt { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar { height: 6px; border-radius: 999px; background: var(--track); overflow: hidden; }
+  .bar > i {
+    display: block; height: 100%; width: 0%; border-radius: 999px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    transition: width .25s ease;
+  }
+  .dock button.primary { padding: 11px 20px; font-size: 14px; min-height: 44px; }
+  @media (max-width: 420px) { .dock button.primary { padding: 11px 16px; } }
+
+  /* ---------------------------------------------------------- picker */
+  dialog {
+    border: 1px solid var(--line); border-radius: var(--r); background: var(--card);
+    color: var(--text); padding: 0; width: min(760px, 94vw); max-height: 86vh;
+    box-shadow: 0 24px 60px -20px rgba(0,0,0,.7);
+  }
+  dialog::backdrop { background: rgba(0,0,0,.6); backdrop-filter: blur(2px); }
+  dialog .top { display: flex; gap: 8px; align-items: center; padding: 12px; border-bottom: 1px solid var(--line); }
+  dialog .body { padding: 12px; overflow: auto; max-height: calc(86vh - 70px); -webkit-overflow-scrolling: touch; }
+  .pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+  .pick button { padding: 0; border-radius: 10px; overflow: hidden; display: grid; background: var(--field); font-weight: 400; min-height: 0; }
+  .pick button:hover { border-color: var(--accent); }
+  .pick button div { aspect-ratio: 1; background: var(--track) center/cover no-repeat; }
+  .pick button span { font-size: 11px; padding: 5px 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+
+  details > summary { cursor: pointer; color: var(--muted); font-size: 12px; padding: 6px 0; }
+  details > summary:hover { color: var(--text); }
+  pre.preview {
+    white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; background: var(--field);
+    border: 1px solid var(--line); border-radius: 10px; padding: 11px; margin: 8px 0 0;
+    max-height: 360px; overflow: auto;
+  }
+  .toast {
+    position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 10;
+    max-width: calc(100vw - 24px); background: var(--card); border: 1px solid var(--line2);
+    border-radius: 12px; padding: 10px 16px; font-size: 13px; box-shadow: var(--shadow);
+    animation: drop .18s ease;
+  }
+  @keyframes drop { from { opacity: 0; transform: translate(-50%, -8px); } }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span class="mark">H3</span> Ref2VA</h1>
+    <a href="/" target="_blank">ComfyUI</a>
+    <a href="/status" target="_blank">Status</a>
+    <span id="pill" class="pill offline"><span class="dot"></span><span id="pillText">connecting</span></span>
+  </header>
+
+  <div class="cols">
+    <div>
+      <section class="card" data-sec="refs">
+        <h2>Reference images <span class="right muted" id="refNote"></span></h2>
+        <p class="hint">Referred to in the prompt as &lt;Picture 1&gt;, &lt;Picture 2&gt;… in this order.</p>
+        <div class="refs" id="refs"></div>
+      </section>
+
+      <section class="card" data-sec="blocks">
+        <h2>Shared prompt blocks <span class="right"><button class="ghost" id="addBlock">+ block</button></span></h2>
+        <p class="hint">Used by every segment. “Before” blocks go ahead of the shot, “after” blocks follow it.</p>
+        <div class="stack" id="blocks"></div>
+      </section>
+
+      <section class="card" data-sec="segments">
+        <h2>Segments <span class="right muted" id="segNote"></span></h2>
+        <p class="hint">One clip per segment, each continuing the motion of the one before. Action only — the shared blocks are added for you. Each finished segment appears under Runs straight away, so you can Stop before the rest are made.</p>
+        <div class="stack" id="segments"></div>
+        <div class="row" style="margin-top:10px">
+          <button id="addSeg">+ segment</button>
+          <span class="grow"></span>
+          <button class="ghost" id="randAll">Randomise all seeds</button>
+        </div>
+        <details style="margin-top:10px"><summary>Preview assembled prompts</summary><div id="preview"></div></details>
+      </section>
+    </div>
+
+    <div>
+      <section class="card" data-sec="video">
+        <h2>Video</h2>
+        <div class="stack">
+          <div class="row" id="ratios"></div>
+          <div class="grid3">
+            <label class="f">Width<input type="number" id="wIn" min="64" data-k="width"></label>
+            <label class="f">Height<input type="number" id="hIn" min="64" data-k="height"></label>
+            <label class="f">Snap
+              <select data-k="snap" data-num id="snapSel">
+                <option value="0">Off</option><option value="8">8</option>
+                <option value="16">16</option><option value="32">32</option><option value="64">64</option>
+              </select>
+            </label>
+          </div>
+          <div class="grid3">
+            <label class="f">Seconds / segment<input type="number" step="0.5" min="0.5" data-k="seconds" data-num></label>
+            <label class="f">Steps<input type="number" min="1" max="100" data-k="steps" data-num></label>
+            <label class="f">Context frames
+              <select data-k="context_length"><option>5</option><option>22</option><option>39</option><option>56</option></select>
+            </label>
+          </div>
+          <div class="grid2">
+            <label class="f">Sampler<select data-k="sampler" data-opts="samplers"></select></label>
+            <label class="f">Scheduler<select data-k="scheduler" data-opts="schedulers"></select></label>
+          </div>
+          <div class="hint" id="lenNote" style="margin:0"></div>
+        </div>
+      </section>
+
+      <section class="card" data-sec="loras">
+        <h2>LoRAs <span class="right"><button class="ghost" id="addLora">+ LoRA</button></span></h2>
+        <div id="loras"></div>
+      </section>
+
+      <section class="card" data-sec="chain">
+        <h2>Chain</h2>
+        <p class="hint">Continue a previous run’s last segment, so a long sequence can be built a few segments at a time. Resolution must stay the same across a chain.</p>
+        <div class="grid2">
+          <label class="f">Continue from<select data-k="load_index" data-num id="loadSel"></select></label>
+          <label class="f">Save this run as clip<input type="number" min="0" data-k="save_index" data-num></label>
+        </div>
+        <label class="switch" style="margin-top:10px">
+          <input type="checkbox" data-k="save_every_segment">
+          Save a latent after every segment
+        </label>
+        <div class="row" style="margin-top:10px">
+          <button id="nextLink">Next link →</button>
+          <button class="ghost" id="resetChain">Reset to fresh</button>
+          <span class="grow"></span>
+          <button class="danger" id="clearLatents">Delete all latents</button>
+        </div>
+        <div class="hint" id="chainNote" style="margin:8px 0 0"></div>
+      </section>
+
+      <section class="card" data-sec="upscale">
+        <h2>SeedVR2 upscale <span class="right"><label class="switch"><input type="checkbox" data-k="upscale.enabled"> on</label></span></h2>
+        <div class="stack" id="upBody">
+          <div class="grid3">
+            <label class="f">Resolution<input type="number" step="8" min="256" data-k="upscale.resolution" data-num></label>
+            <label class="f">Batch size<input type="number" step="4" min="1" data-k="upscale.batch_size" data-num></label>
+            <label class="f">Blocks to swap<input type="number" min="0" max="36" data-k="upscale.blocks_to_swap" data-num></label>
+          </div>
+          <label class="f">DiT model<select data-k="upscale.dit" data-opts="seedvr2_dit"></select></label>
+          <div class="grid2">
+            <label class="f">Colour correction
+              <select data-k="upscale.color_correction"><option>lab</option><option>wavelet</option><option>wavelet_adaptive</option><option>hsv</option><option>adain</option><option>none</option></select>
+            </label>
+            <label class="f">Seed<input type="number" data-k="upscale.seed" data-num></label>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" data-sec="models">
+        <h2>Models &amp; output</h2>
+          <div class="stack">
+            <label class="f">Diffusion model<select data-k="unet" data-opts="unet"></select></label>
+            <label class="f">Text encoder<select data-k="clip" data-opts="clip"></select></label>
+            <div class="grid2">
+              <label class="f">Video VAE<select data-k="video_vae" data-opts="vae"></select></label>
+              <label class="f">Audio VAE<select data-k="audio_vae" data-opts="vae"></select></label>
+            </div>
+            <div class="grid2">
+              <label class="f">Reference max MP<input type="number" step="0.5" min="0.5" data-k="ref_max_mp" data-num></label>
+              <label class="f">Reference size<select data-k="ref_image_size"><option>match</option><option>max</option></select></label>
+            </div>
+            <label class="f">Output folder (under output/)<input data-k="prefix"></label>
+            <label class="switch"><input type="checkbox" data-k="save_segments"> Also save each segment as its own mp4 (needed for segment previews)</label>
+          </div>
+      </section>
+    </div>
+  </div>
+
+  <section class="card" data-sec="runs">
+    <h2>Runs <span class="right"><button class="ghost" id="refreshRuns">Refresh</button></span></h2>
+    <div id="runs"><div class="muted">No runs yet.</div></div>
+  </section>
+</div>
+
+<div class="dock"><div class="in">
+  <div class="prog">
+    <div class="txt" id="progText">Idle</div>
+    <div class="bar"><i id="progBar"></i></div>
+  </div>
+  <button class="danger" id="stop" hidden>Stop</button>
+  <button class="primary" id="go">Generate</button>
+</div></div>
+
+<dialog id="picker">
+  <div class="top">
+    <input id="pickFilter" placeholder="Filter input images…" class="grow">
+    <button id="pickUpload">Upload…</button>
+    <button class="ghost" id="pickClose">✕</button>
+  </div>
+  <div class="body"><div class="pick" id="pickGrid"></div></div>
+</dialog>
+<input type="file" id="fileIn" accept="image/*" hidden>
+
+<script>
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const h = (tag, attrs = {}, ...kids) => {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (k === "style" && typeof v === "object") Object.assign(el.style, v);
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid.nodeType ? kid : String(kid));
+  return el;
+};
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+const CLIENT_ID = (() => {
+  try {
+    let id = localStorage.getItem("mmh3.client");
+    if (!id) { id = crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2); localStorage.setItem("mmh3.client", id); }
+    return id;
+  } catch (e) { return String(Math.random()).slice(2); }
+})();
+
+const RATIOS = [["9:16", 736, 1280], ["16:9", 1280, 736], ["1:1", 960, 960], ["4:5", 832, 1024], ["3:4", 832, 1120], ["2:3", 768, 1152]];
+const SEED_MAX = 2 ** 50;
+
+const DEFAULT_BLOCKS = [
+  { label: "Subject definitions", on: true, where: "before", text:
+    "subject_definitions:\n<Subject 1> is the adult woman in <Picture 1>. Her identity, facial appearance, hair, body proportions, clothing, and distinctive visual features are preserved.\n<Subject 2> is the living room in <Picture 2>. Its layout, furniture, lighting, colours, materials, and atmosphere are preserved.\n<Subject 3> is the adult man in <Picture 3>. His identity, facial appearance, hair, body proportions, clothing, and distinctive visual features are preserved." },
+  { label: "Retention", on: true, where: "before", text:
+    "retention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - The woman’s identity and recognisable appearance are preserved.\n<Subject 2> (appears in [Shot 1]): fully_preserved - The living room environment is preserved.\n<Subject 3> (appears in [Shot 1]): fully_preserved - The man’s identity and recognisable appearance are preserved." },
+  { label: "Summary", on: true, where: "before", text: "summary:\n[reference generation] The target video places <Subject 1> and <Subject 3> naturally inside <Subject 2>." },
+  { label: "Room consistency", on: true, where: "after", text: "The room lighting, furniture arrangement, rug, and wooden floor remain consistent with <Picture 2>." },
+  { label: "Sound", on: true, where: "after", text: "overall_soundscape: Raw phone microphone quality with low-fi background static hiss\n\nnon_diegetic_music: n/a" },
+];
+
+let OPT = { images: [], loras: [], slots: [], limits: { segments: 6, refs: 6 } };
+let S = null;             // the form state; this is what is sent to /mmh3/api/build
+let pickTarget = null;    // ref index the picker is choosing for
+let running = null;       // { prompt_id, total, done:Set, titles }
+let lastBuilt = {};       // prompt_id -> { titles, info }
+
+// ---------------------------------------------------------------- collapsing
+/**
+ * Each card folds away to its header, so a phone shows a short list of
+ * sections rather than one long scroll. Which are folded is a per-device
+ * preference, so it lives in localStorage rather than the shared settings.
+ */
+const COLLAPSE_KEY = "mmh3.collapsed";
+const DEFAULT_COLLAPSED = ["models"];
+function collapsed() {
+  try { return new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY)) || DEFAULT_COLLAPSED); }
+  catch (e) { return new Set(DEFAULT_COLLAPSED); }
+}
+function setupCollapse() {
+  const folded = collapsed();
+  for (const card of $$("section.card[data-sec]")) {
+    const key = card.dataset.sec, head = $("h2", card);
+    if (!head) continue;
+    head.prepend(h("span", { class: "chev" }, "▼"));
+    card.classList.toggle("collapsed", folded.has(key));
+    head.setAttribute("role", "button");
+    head.setAttribute("aria-expanded", String(!folded.has(key)));
+    head.addEventListener("click", e => {
+      // controls living in the header (+ block, the upscale switch, Refresh)
+      // are not part of the fold target
+      if (e.target.closest(".right button, .right input, .right label")) return;
+      const now = collapsed();
+      const isFolded = card.classList.toggle("collapsed");
+      isFolded ? now.add(key) : now.delete(key);
+      head.setAttribute("aria-expanded", String(!isFolded));
+      if (!isFolded) growAll();
+      try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...now])); } catch (err) {}
+    });
+  }
+}
+
+// ---------------------------------------------------------------- state
+function freshState(d) {
+  return {
+    refs: [{ image: "IMG_6216B.png" }, { image: "house.png" }, { image: "IMG_7223.jpg" }],
+    blocks: DEFAULT_BLOCKS.map(b => ({ ...b })),
+    segments: [1, 2, 3].map(() => ({ prompt: "", seed: "", random: true })),
+    width: d.width, height: d.height, ratio: "9:16", snap: d.snap ?? 32,
+    seconds: d.seconds, fps: d.fps, steps: d.steps,
+    sampler: d.sampler, scheduler: d.scheduler, context_length: d.context_length,
+    audio_context_length: d.audio_context_length,
+    loras: d.loras.map(l => ({ ...l })),
+    load_index: d.load_index, save_index: d.save_index, latent_folder: d.latent_folder,
+    save_every_segment: d.save_every_segment ?? false,
+    upscale: { ...d.upscale },
+    unet: d.unet, clip: d.clip, video_vae: d.video_vae, audio_vae: d.audio_vae,
+    ref_max_mp: d.ref_max_mp, ref_image_size: d.ref_image_size,
+    prefix: d.prefix, save_segments: d.save_segments,
+  };
+}
+const getK = (k) => k.split(".").reduce((o, p) => o == null ? o : o[p], S);
+function setK(k, v) {
+  const parts = k.split("."); let o = S;
+  while (parts.length > 1) o = o[parts.shift()];
+  o[parts[0]] = v;
+}
+
+let saveTimer = null;
+function changed(rerender) {
+  if (rerender) render();
+  else renderInfo();
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(persist, 600);
+}
+function persist() {
+  try { localStorage.setItem("mmh3.settings", JSON.stringify(S)); } catch (e) {}
+  fetch("mmh3/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(S) }).catch(() => {});
+}
+
+// ---------------------------------------------------------------- helpers
+function frameCount(sec, fps) {
+  const want = Math.max(5, Math.round(sec * fps));
+  return Math.ceil((want - 5) / 17) * 17 + 5;
+}
+function assemble(shot) {
+  const before = [], after = [];
+  for (const b of S.blocks) {
+    if (!b.on || !b.text.trim()) continue;
+    (b.where === "after" ? after : before).push(b.text.trim());
+  }
+  return [...before, ...(shot.trim() ? [shot.trim()] : []), ...after].join("\n\n");
+}
+function viewUrl(name, type = "input", extra = "") {
+  const i = name.lastIndexOf("/");
+  const sub = i >= 0 ? name.slice(0, i) : "", file = i >= 0 ? name.slice(i + 1) : name;
+  return `/view?filename=${encodeURIComponent(file)}&subfolder=${encodeURIComponent(sub)}&type=${type}${extra}`;
+}
+/** Let a textarea follow its content instead of making the user drag it. */
+function grow(ta, max = 640) {
+  ta.style.height = "auto";
+  const min = parseInt(getComputedStyle(ta).minHeight) || 0;
+  ta.style.height = Math.min(max, Math.max(ta.scrollHeight + 2, min)) + "px";
+}
+function growAll() { for (const ta of $$("textarea")) grow(ta); }
+
+function toast(msg, ms = 2600) {
+  const t = h("div", { class: "toast" }, msg);
+  document.body.append(t);
+  setTimeout(() => t.remove(), ms);
+}
+function fmtTime(ts) {
+  const d = new Date(ts);
+  return d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+// ---------------------------------------------------------------- render
+function render() {
+  renderRefs(); renderBlocks(); renderSegments(); renderLoras(); renderRatios(); renderChain();
+  bindFields(); renderInfo(); growAll();
+}
+
+function renderRefs() {
+  const box = $("#refs"); box.replaceChildren();
+  S.refs.forEach((r, i) => {
+    const thumb = h("div", { class: "thumb", onclick: () => openPicker(i) });
+    if (r.image) thumb.style.backgroundImage = `url("${viewUrl(r.image, "input", "&preview=webp;70")}")`;
+    else thumb.textContent = "Choose…";
+    box.append(h("div", { class: "ref" },
+      thumb,
+      h("div", { class: "meta" }, h("b", {}, `Picture ${i + 1}`), h("span", { title: r.image || "" }, r.image || "empty")),
+      h("div", { class: "acts" },
+        h("button", { title: "Move earlier", disabled: i === 0, onclick: () => { [S.refs[i - 1], S.refs[i]] = [S.refs[i], S.refs[i - 1]]; changed(true); } }, "←"),
+        h("button", { onclick: () => openPicker(i) }, "Change"),
+        h("button", { title: "Remove", onclick: () => { S.refs.splice(i, 1); changed(true); } }, "✕"))));
+  });
+  if (S.refs.length < OPT.limits.refs) {
+    box.append(h("div", { class: "ref add", onclick: () => { S.refs.push({ image: "" }); openPicker(S.refs.length - 1); } }, "+ Add image"));
+  }
+  $("#refNote").textContent = `${S.refs.filter(r => r.image).length} / ${OPT.limits.refs}`;
+}
+
+/** Chevron that folds one block or segment down to its header. */
+function foldBtn(item) {
+  return h("button", { class: "ghost", title: item.fold ? "Expand" : "Collapse",
+    onclick: () => { item.fold = !item.fold; changed(true); } }, item.fold ? "▸" : "▾");
+}
+const peek = text => h("div", { class: "peek" }, text.trim().replace(/\s+/g, " ").slice(0, 120) || "empty");
+
+function renderBlocks() {
+  const box = $("#blocks"); box.replaceChildren();
+  S.blocks.forEach((b, i) => {
+    const ta = h("textarea", { rows: Math.min(10, Math.max(3, b.text.split("\n").length + 1)) });
+    ta.value = b.text;
+    ta.addEventListener("input", () => { b.text = ta.value; grow(ta); changed(); });
+    const lbl = h("input", { class: "label grow", placeholder: "Label", value: b.label || "" });
+    lbl.addEventListener("input", () => { b.label = lbl.value; changed(); });
+    const on = h("input", { type: "checkbox", title: "Include", checked: b.on });
+    on.addEventListener("change", () => { b.on = on.checked; changed(true); });
+    const where = h("div", { class: "seg" },
+      ...["before", "after"].map(w => h("button", { class: (b.where || "before") === w ? "on" : "", onclick: () => { b.where = w; changed(true); } }, w)));
+    box.append(h("div", { class: "item" + (b.on ? "" : " off") + (b.fold ? " fold" : "") },
+      h("div", { class: "head" }, foldBtn(b), on, lbl,
+        h("button", { class: "ghost", title: "Move up", disabled: i === 0, onclick: () => { [S.blocks[i - 1], S.blocks[i]] = [S.blocks[i], S.blocks[i - 1]]; changed(true); } }, "↑"),
+        h("button", { class: "ghost", title: "Delete", onclick: () => { if (!b.text.trim() || confirm("Delete this block?")) { S.blocks.splice(i, 1); changed(true); } } }, "✕")),
+      b.fold ? peek(b.text) : h("div", { class: "row" }, where,
+        h("span", { class: "muted", style: { fontSize: "12px" } }, b.where === "after" ? "after the shot" : "before the shot")),
+      b.fold ? null : ta));
+  });
+}
+
+function renderSegments() {
+  const box = $("#segments"); box.replaceChildren();
+  S.segments.forEach((s, i) => {
+    const ta = h("textarea", { class: "shot", rows: 8, placeholder: `[Shot ${i + 1}] What happens in this segment…\n\n[0.03] Beats with timings go on their own lines.` });
+    ta.value = s.prompt;
+    ta.addEventListener("input", () => { s.prompt = ta.value; grow(ta); changed(); });
+    const seed = h("input", { class: "seed mono", type: "number", placeholder: "random", value: s.seed ?? "", disabled: s.random });
+    seed.addEventListener("input", () => { s.seed = seed.value; changed(); });
+    const lock = h("input", { type: "checkbox", checked: !s.random });
+    lock.addEventListener("change", () => {
+      s.random = !lock.checked;
+      if (!s.random && (s.seed === "" || s.seed == null)) s.seed = Math.floor(Math.random() * SEED_MAX);
+      changed(true);
+    });
+    box.append(h("div", { class: "item" + (s.fold ? " fold" : "") },
+      h("div", { class: "head" },
+        foldBtn(s),
+        h("span", { class: "tag" }, `SEGMENT ${i + 1}`),
+        h("span", { class: "grow" }),
+        h("button", { class: "ghost", title: "Duplicate", onclick: () => { S.segments.splice(i + 1, 0, { ...s }); changed(true); }, disabled: S.segments.length >= OPT.limits.segments }, "⧉"),
+        h("button", { class: "ghost", title: "Move up", disabled: i === 0, onclick: () => { [S.segments[i - 1], S.segments[i]] = [S.segments[i], S.segments[i - 1]]; changed(true); } }, "↑"),
+        h("button", { class: "ghost", title: "Delete", disabled: S.segments.length <= 1, onclick: () => { if (!s.prompt.trim() || confirm(`Delete segment ${i + 1}?`)) { S.segments.splice(i, 1); changed(true); } } }, "✕")),
+      s.fold ? peek(s.prompt) : ta,
+      s.fold ? null : h("div", { class: "seg-meta" },
+        h("label", { class: "switch" }, lock, "Keep seed"), seed,
+        h("span", { class: "note" }, s.random ? "new seed every run" : "same result on re-run"))));
+  });
+  $("#addSeg").disabled = S.segments.length >= OPT.limits.segments;
+}
+
+function renderLoras() {
+  const box = $("#loras"); box.replaceChildren();
+  if (!S.loras.length) box.append(h("div", { class: "muted" }, "No LoRAs."));
+  S.loras.forEach((l, i) => {
+    const on = h("input", { type: "checkbox", checked: l.on });
+    on.addEventListener("change", () => { l.on = on.checked; changed(true); });
+    const sel = h("select", { class: "grow" });
+    const names = OPT.loras.length ? OPT.loras.slice() : [];
+    if (l.name && !names.includes(l.name)) names.unshift(l.name);
+    if (!l.name) sel.append(h("option", { value: "" }, "— choose —"));
+    for (const n of names) sel.append(h("option", { value: n, selected: n === l.name }, n + (OPT.loras.length && !OPT.loras.includes(n) ? "  (missing)" : "")));
+    sel.addEventListener("change", () => { l.name = sel.value; changed(); });
+    const rng = h("input", { type: "range", min: -1, max: 2, step: 0.05, value: l.strength });
+    const num = h("input", { type: "number", min: -5, max: 5, step: 0.05, value: l.strength });
+    rng.addEventListener("input", () => { l.strength = +rng.value; num.value = rng.value; changed(); });
+    num.addEventListener("input", () => { l.strength = +num.value; rng.value = num.value; changed(); });
+    box.append(h("div", { class: "lora" + (l.on ? "" : " off") },
+      on, sel,
+      h("button", { class: "ghost", title: "Remove", onclick: () => { S.loras.splice(i, 1); changed(true); } }, "✕"),
+      h("div", { class: "str" }, rng, num)));
+  });
+}
+
+function renderRatios() {
+  const box = $("#ratios"); box.replaceChildren();
+  for (const [name, w, hh] of RATIOS) {
+    box.append(h("button", { class: S.ratio === name ? "primary" : "", title: `${w}×${hh}`, onclick: () => {
+      S.ratio = name; S.width = w; S.height = hh; syncDims("width"); changed(true);
+    } }, name));
+  }
+  box.append(h("button", { class: S.ratio ? "ghost" : "primary", title: "Type width and height independently", onclick: () => { S.ratio = ""; changed(true); } }, "Free"));
+}
+
+/** Round to a multiple of step, halves away from zero (mmh3_builder.snap_dim). */
+function snapTo(n, step) {
+  n = Math.max(32, Math.round(+n || 0));
+  if (!step) return n;
+  return Math.max(step, Math.floor((n + step / 2) / step) * step);
+}
+const parseRatio = r => {
+  const m = /^(\d+):(\d+)$/.exec(r || "");
+  return m ? { w: +m[1], h: +m[2] } : null;
+};
+
+/**
+ * Keep the other side in step with the one just edited.
+ *
+ * `which` is the field the user changed; with a ratio locked the opposite
+ * side is recomputed from it, then both are snapped. Called with "snap" when
+ * only the step changed, which re-snaps in place.
+ */
+function syncDims(which) {
+  const step = +S.snap || 0, r = parseRatio(S.ratio);
+  let w = +S.width || 0, hh = +S.height || 0;
+  if (r) {
+    if (which === "height") w = hh * r.w / r.h;
+    else hh = w * r.h / r.w;
+  }
+  S.width = snapTo(w, step);
+  S.height = snapTo(hh, step);
+}
+
+function renderChain() {
+  const sel = $("#loadSel"); sel.replaceChildren(h("option", { value: 0 }, "Nothing — fresh start"));
+  const idx = new Set(OPT.slots.map(s => s.index));
+  for (const s of OPT.slots) sel.append(h("option", { value: s.index }, `Clip ${s.index} · ${fmtTime(s.mtime * 1000)}`));
+  if (S.load_index > 0 && !idx.has(S.load_index)) sel.append(h("option", { value: S.load_index }, `Clip ${S.load_index} (not on disk!)`));
+}
+
+function bindFields() {
+  for (const el of $$("[data-opts]")) {
+    const list = OPT[el.dataset.opts] || [];
+    const cur = getK(el.dataset.k);
+    el.replaceChildren();
+    const names = list.slice();
+    if (cur != null && cur !== "" && !names.includes(String(cur))) names.unshift(String(cur));
+    for (const n of names) el.append(h("option", { value: n }, n + (list.length && !list.includes(n) ? "  (missing)" : "")));
+  }
+  for (const el of $$("[data-k]")) {
+    const k = el.dataset.k, v = getK(k);
+    if (el.type === "checkbox") el.checked = !!v; else el.value = v ?? "";
+    if (el._bound) continue;
+    el._bound = true;
+    const event = el.tagName === "SELECT" || el.type === "checkbox" ||
+      k === "width" || k === "height" ? "change" : "input";
+    el.addEventListener(event, () => {
+      let nv = el.type === "checkbox" ? el.checked : el.value;
+      if (el.type === "number" || "num" in el.dataset) nv = nv === "" ? "" : Number(nv);
+      setK(k, nv);
+      if (k === "width" || k === "height" || k === "snap") {
+        syncDims(k === "snap" ? "snap" : k);
+        $("#wIn").value = S.width; $("#hIn").value = S.height;
+        renderRatios();
+      }
+      changed(false);
+      if (k === "load_index") renderChain();
+    });
+  }
+}
+
+function renderInfo() {
+  const len = frameCount(+S.seconds || 0, S.fps || 24);
+  const ctx = +S.context_length, n = S.segments.length;
+  const delivered = len * n - ctx * (n - 1) - (S.load_index > 0 ? ctx : 0);
+  const r = parseRatio(S.ratio);
+  const actual = (S.width / S.height).toFixed(3);
+  const warn = (S.width % 16 || S.height % 16)
+    ? " · ⚠ H3 works in 16-pixel blocks; this size may fail to encode"
+    : r && Math.abs(S.width / S.height - r.w / r.h) > 0.002
+      ? ` · ${actual}:1, a little off ${S.ratio} (${(r.w / r.h).toFixed(3)}:1) — snap ${S.snap} can't hit it exactly` : "";
+  $("#lenNote").textContent = `${len} frames per segment → about ${(delivered / (S.fps || 24)).toFixed(1)} s total over ${n} segment${n > 1 ? "s" : ""}${warn}`;
+  $("#segNote").textContent = `${n} × ${(len / (S.fps || 24)).toFixed(2)} s` +
+    (S.save_segments ? "" : " · previews off");
+  $("#upBody").style.opacity = S.upscale.enabled ? 1 : .45;
+  $("#wIn").step = $("#hIn").step = S.snap || 1;
+  const pv = $("#preview"); pv.replaceChildren();
+  S.segments.forEach((s, i) => pv.append(h("div", { class: "muted", style: { marginTop: "8px", fontSize: "12px" } }, `Segment ${i + 1}`), h("pre", { class: "preview" }, assemble(s.prompt))));
+  const note = $("#chainNote");
+  const slot = i => `clip_${String(i).padStart(5, "0")}.safetensors`;
+  const last = S.save_index + (S.save_every_segment ? S.segments.length - 1 : 0);
+  const overwrite = OPT.slots.some(x => x.index >= S.save_index && x.index <= last) ? " Existing slots in that range are overwritten." : "";
+  note.textContent = S.save_index > 0
+    ? (S.save_every_segment
+        ? `Segments save to ${S.latent_folder}/${slot(S.save_index)} … ${slot(last)}, each as it finishes — so a run you stop part way can still be continued from.${overwrite}`
+        : `Only the last segment saves, to ${S.latent_folder}/${slot(S.save_index)}. Stop the run part way and there is nothing to continue from.${overwrite}`)
+    : "Chain latent won't be saved (save = 0).";
+}
+
+// ---------------------------------------------------------------- image picker
+function openPicker(i) {
+  pickTarget = i;
+  $("#pickFilter").value = "";
+  fillPicker();
+  $("#picker").showModal();
+}
+function fillPicker() {
+  const q = $("#pickFilter").value.toLowerCase();
+  const grid = $("#pickGrid"); grid.replaceChildren();
+  const list = OPT.images.filter(n => n.toLowerCase().includes(q)).slice(0, 300);
+  if (!list.length) grid.append(h("div", { class: "muted" }, "No images."));
+  for (const name of list) {
+    const d = h("div"); d.style.backgroundImage = `url("${viewUrl(name, "input", "&preview=webp;50")}")`;
+    grid.append(h("button", { title: name, onclick: () => choose(name) }, d, h("span", {}, name)));
+  }
+}
+function choose(name) {
+  S.refs[pickTarget].image = name;
+  $("#picker").close();
+  changed(true);
+}
+async function upload(file) {
+  const fd = new FormData();
+  fd.append("image", file); fd.append("type", "input");
+  const r = await fetch("/upload/image", { method: "POST", body: fd });
+  if (!r.ok) throw new Error(await r.text());
+  const j = await r.json();
+  const name = j.subfolder ? `${j.subfolder}/${j.name}` : j.name;
+  if (!OPT.images.includes(name)) OPT.images.unshift(name);
+  return name;
+}
+$("#pickFilter").addEventListener("input", fillPicker);
+$("#pickClose").addEventListener("click", () => $("#picker").close());
+$("#picker").addEventListener("close", () => { S.refs = S.refs.filter((r, i) => r.image || i !== pickTarget); render(); });
+$("#pickUpload").addEventListener("click", () => $("#fileIn").click());
+$("#fileIn").addEventListener("change", async e => {
+  const f = e.target.files[0]; e.target.value = "";
+  if (!f) return;
+  try { choose(await upload(f)); } catch (err) { toast("Upload failed: " + err.message); }
+});
+document.addEventListener("paste", async e => {
+  if (!$("#picker").open) return;
+  const f = [...(e.clipboardData?.files || [])].find(f => f.type.startsWith("image/"));
+  if (f) { try { choose(await upload(f)); } catch (err) { toast("Upload failed"); } }
+});
+
+// ---------------------------------------------------------------- buttons
+$("#addBlock").addEventListener("click", () => { S.blocks.push({ label: "", on: true, where: "before", text: "" }); changed(true); });
+$("#addSeg").addEventListener("click", () => { S.segments.push({ prompt: "", seed: "", random: true }); changed(true); });
+$("#addLora").addEventListener("click", () => { S.loras.push({ name: "", on: true, strength: 1 }); changed(true); });
+$("#randAll").addEventListener("click", () => { S.segments.forEach(s => { s.random = true; s.seed = ""; }); changed(true); });
+$("#nextLink").addEventListener("click", () => {
+  const next = Math.max(1, (+S.save_index || 0) + (S.save_every_segment ? S.segments.length - 1 : 0));
+  S.load_index = next; S.save_index = next + 1;
+  changed(true); toast(`Continuing from clip ${next}, saving clip ${next + 1}`);
+});
+$("#resetChain").addEventListener("click", () => { S.load_index = 0; S.save_index = 1; changed(true); });
+$("#clearLatents").addEventListener("click", async () => {
+  const n = OPT.slots.length;
+  if (!confirm(`Delete every saved chain latent in ${S.latent_folder}/?${n ? `\n\n${n} clip${n > 1 ? "s" : ""} on disk — any chain continuing from them has to start again.` : ""}`)) return;
+  try {
+    const r = await fetch("mmh3/api/latents/clear", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ folder: S.latent_folder }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || "Delete failed");
+    S.load_index = 0; S.save_index = 1;
+    changed(true);
+    await loadOptions();
+    toast(j.deleted.length ? `Deleted ${j.deleted.length} latent${j.deleted.length > 1 ? "s" : ""} — chain reset to fresh` : "No saved latents to delete");
+    if (j.failed?.length) showError(j.failed.join("\n"));
+  } catch (e) { showError(e.message); }
+});
+$("#refreshRuns").addEventListener("click", () => { loadRuns(); loadOptions(); });
+
+$("#go").addEventListener("click", generate);
+$("#stop").addEventListener("click", async () => {
+  if (!running) return;
+  const btn = $("#stop");
+  if (!btn.dataset.armed) { btn.dataset.armed = 1; btn.textContent = "Tap again"; setTimeout(() => { delete btn.dataset.armed; btn.textContent = "Stop"; }, 2500); return; }
+  delete btn.dataset.armed; btn.textContent = "Stop";
+  await fetch("/interrupt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt_id: running.prompt_id }) });
+  await fetch("/queue", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ delete: [running.prompt_id] }) });
+});
+
+async function generate() {
+  const go = $("#go"); go.disabled = true;
+  try {
+    const b = await fetch("mmh3/api/build", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(S) });
+    const bj = await b.json();
+    if (!b.ok) throw new Error(bj.error || "Build failed");
+    const titles = Object.fromEntries(Object.entries(bj.prompt).map(([k, v]) => [k, v._meta?.title || k]));
+    const r = await fetch("/prompt", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: bj.prompt, client_id: CLIENT_ID, extra_data: { mmh3: true, mmh3_info: bj.info, mmh3_settings: S } }),
+    });
+    const rj = await r.json();
+    if (!r.ok || rj.error) {
+      const lines = [rj.error?.message || "Rejected", rj.error?.details || ""];
+      for (const [id, ne] of Object.entries(rj.node_errors || {}))
+        for (const e of ne.errors || []) lines.push(`• ${titles[id] || id}: ${e.message}${e.details ? " — " + e.details : ""}`);
+      throw new Error(lines.filter(Boolean).join("\n"));
+    }
+    // A kept seed stays; a random one is shown so it can be kept afterwards.
+    lastBuilt[rj.prompt_id] = { titles, info: bj.info };
+    toast(`Queued · ${bj.info.seconds}s at ${bj.info.width}×${bj.info.height}`);
+    loadRuns();
+  } catch (e) {
+    showError(e.message);
+  } finally {
+    go.disabled = false;
+  }
+}
+function showError(msg) {
+  const runs = $("#runs");
+  runs.prepend(h("div", { class: "err" }, msg));
+  runs.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// ---------------------------------------------------------------- runs / history
+const OUT_LABEL = id => id === "save_up" ? "Upscaled" : id === "save_low" ? "Joined" : /^s(\d+)_save$/.test(id) ? "Segment " + id.match(/^s(\d+)/)[1] : id;
+const OUT_ORDER = id => id === "save_up" ? 0 : id === "save_low" ? 1 : 2 + (+(id.match(/^s(\d+)/) || [0, 0])[1]);
+
+async function loadRuns() {
+  let hist = {}, queue = { queue_running: [], queue_pending: [] };
+  try {
+    [hist, queue] = await Promise.all([
+      fetch("/history?max_items=40").then(r => r.json()),
+      fetch("/queue").then(r => r.json()),
+    ]);
+  } catch (e) { return; }
+  const runs = [];
+  for (const item of [...queue.queue_running, ...queue.queue_pending]) {
+    if (!item[3]?.mmh3) continue;
+    // A run in flight has no history entry yet, so its finished segments come
+    // from the executed events collected live instead.
+    const live = running && running.prompt_id === item[1] ? running.outputs : null;
+    runs.push({ id: item[1], extra: item[3], outputs: live || {},
+                state: queue.queue_running.includes(item) ? "running" : "queued" });
+  }
+  for (const [id, v] of Object.entries(hist)) {
+    const extra = v.prompt?.[3];
+    if (!extra?.mmh3) continue;
+    runs.push({ id, extra, outputs: v.outputs || {}, status: v.status || {} });
+  }
+  runs.sort((a, b) => (b.extra.create_time || 0) - (a.extra.create_time || 0));
+  const box = $("#runs"); box.replaceChildren();
+  if (!runs.length) { box.append(h("div", { class: "muted" }, "No runs yet.")); return; }
+  runs.slice(0, 12).forEach((run, idx) => box.append(renderRun(run, idx === 0)));
+}
+
+function renderRun(run, first) {
+  const info = run.extra.mmh3_info || {};
+  const st = run.state || run.status.status_str;
+  const cls = st === "success" ? "good" : st === "error" ? "bad" : "run";
+  const label = st === "success" ? "done" : st === "error" ? (interrupted(run) ? "stopped" : "error") : st;
+  const vids = [];
+  for (const [nid, out] of Object.entries(run.outputs || {})) {
+    for (const v of out.pixaroma_videos || []) vids.push({ nid, v });
+  }
+  vids.sort((a, b) => OUT_ORDER(a.nid) - OUT_ORDER(b.nid));
+  const errMsg = (run.status?.messages || []).find(m => m[0] === "execution_error");
+  const settings = run.extra.mmh3_settings;
+  return h("div", { class: "run" },
+    h("div", { class: "head" },
+      h("span", { class: "badge " + cls }, label),
+      h("span", {}, run.extra.create_time ? fmtTime(run.extra.create_time) : ""),
+      info.seconds ? h("span", { class: "muted" }, `${info.seconds}s · ${info.width}×${info.height}`) : null,
+      info.seeds ? h("span", { class: "muted mono", title: "Segment seeds" }, "seeds " + info.seeds.join(", ")) : null,
+      h("span", { class: "grow", style: { flex: 1 } }),
+      settings ? h("button", { class: "ghost", onclick: () => restore(settings, info, false) }, "Load settings") : null,
+      settings && info.seeds ? h("button", { class: "ghost", title: "Load these settings with every seed kept, to re-run or tweak one segment", onclick: () => restore(settings, info, true) }, "Keep seeds") : null,
+      first && st === "success" && info.save_index > 0 ? h("button", { onclick: () => {
+        S.load_index = info.save_index; S.save_index = info.save_index + 1; changed(true);
+        loadOptions(); toast(`Next run continues from clip ${info.save_index}`);
+      } }, "Approve → continue") : null,
+      run.state === "running" || run.state === "queued"
+        ? h("button", { class: "danger", title: "Interrupt this run. Segments already saved stay on disk.",
+            onclick: () => stopRun(run.id) }, "Stop")
+        : h("button", { class: "ghost danger", title: "Delete this run's mp4s and drop it from the list",
+            onclick: () => deleteRun(run, vids.map(x => x.v)) }, vids.length ? "Delete videos" : "Remove")),
+    errMsg ? h("div", { class: "err" }, `${errMsg[1].node_type || ""}: ${errMsg[1].exception_message || ""}`.trim()) : null,
+    vids.length ? h("div", { class: "vids" }, vids.map(({ nid, v }) => {
+      const url = `/view?filename=${encodeURIComponent(v.filename)}&subfolder=${encodeURIComponent(v.subfolder || "")}&type=${v.type || "output"}`;
+      return h("div", { class: "vid" + (nid === "save_up" || (nid === "save_low" && !run.outputs.save_up) ? " main" : "") },
+        player(url),
+        h("div", { class: "cap" }, h("span", {}, OUT_LABEL(nid)),
+          h("a", { href: url, download: v.filename }, "download"),
+          h("a", { href: "#", class: "danger", style: { marginLeft: "0", color: "var(--bad)" },
+            onclick: e => { e.preventDefault(); deleteFiles([v], `Delete ${v.filename}?`); } }, "delete")));
+    })) : null);
+}
+
+/**
+ * One <video> element per file, reused across refreshes.
+ *
+ * The list is rebuilt whenever a segment lands, and a fresh element would
+ * restart whatever the user was watching -- moving the same node keeps its
+ * playback position, volume and fullscreen state.
+ */
+const PLAYERS = new Map();
+function player(url) {
+  let el = PLAYERS.get(url);
+  if (!el) {
+    el = h("video", { src: url, controls: true, playsinline: true, preload: "metadata", loop: true });
+    PLAYERS.set(url, el);
+  }
+  el._seen = Date.now();
+  if (PLAYERS.size > 60) for (const [k, v] of PLAYERS) if (Date.now() - v._seen > 6e5) PLAYERS.delete(k);
+  return el;
+}
+
+async function stopRun(id) {
+  if (!confirm("Stop this run?\n\nSegments already saved stay on disk. The joined video, the upscale and this run's chain latent will not be made.")) return;
+  await fetch("/interrupt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt_id: id }) }).catch(() => {});
+  await fetch("/queue", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ delete: [id] }) }).catch(() => {});
+  loadRuns();
+}
+
+/** Delete mp4s through the page's own endpoint, then refresh the list. */
+async function deleteFiles(files, question) {
+  if (files.length && question && !confirm(question)) return false;
+  try {
+    const r = await fetch("mmh3/api/files/delete", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ files: files.map(f => ({ filename: f.filename, subfolder: f.subfolder || "", type: f.type || "output" })) }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || "Delete failed");
+    if (j.failed?.length) toast(`Deleted ${j.deleted.length}, failed ${j.failed.length}: ${j.failed[0]}`, 5000);
+    else if (j.deleted.length) toast(`Deleted ${j.deleted.length} file${j.deleted.length > 1 ? "s" : ""}`);
+    loadRuns();
+    return true;
+  } catch (e) {
+    showError(e.message);
+    return false;
+  }
+}
+
+async function deleteRun(run, files) {
+  const what = files.length ? `Delete ${files.length} mp4${files.length > 1 ? "s" : ""} of this run?\n\n${files.map(f => f.filename).join("\n")}` : "Remove this run from the list?";
+  if (!confirm(what)) return;
+  if (files.length && !(await deleteFiles(files))) return;
+  await fetch("/history", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ delete: [run.id] }) }).catch(() => {});
+  loadRuns();
+}
+function interrupted(run) {
+  return (run.status?.messages || []).some(m => m[0] === "execution_interrupted");
+}
+function restore(settings, info, keepSeeds) {
+  S = JSON.parse(JSON.stringify(settings));
+  if (keepSeeds && info.seeds) S.segments.forEach((s, i) => { if (info.seeds[i] != null) { s.seed = info.seeds[i]; s.random = false; } });
+  changed(true);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  toast(keepSeeds ? "Loaded with seeds kept — untick Keep seed on a segment to re-roll just that one" : "Settings loaded");
+}
+
+// ---------------------------------------------------------------- live progress
+function setPill(kind, text) { $("#pill").className = "pill " + kind; $("#pillText").textContent = text; }
+function setProgress(text, frac) {
+  $("#progText").textContent = text;
+  $("#progBar").style.width = Math.max(0, Math.min(1, frac)) * 100 + "%";
+}
+let wsRetry = 1000;
+function connect() {
+  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws?clientId=${CLIENT_ID}`);
+  ws.onopen = () => { wsRetry = 1000; setPill("idle", "idle"); };
+  ws.onclose = () => { setPill("offline", "offline"); setTimeout(connect, wsRetry = Math.min(wsRetry * 2, 15000)); };
+  ws.onmessage = ev => {
+    if (typeof ev.data !== "string") return;
+    let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+    const d = m.data || {};
+    switch (m.type) {
+      case "status": {
+        const q = d.status?.exec_info?.queue_remaining ?? 0;
+        if (q > 0) setPill("running", q > 1 ? `running · ${q - 1} queued` : "running");
+        else setPill("idle", "idle");
+        break;
+      }
+      case "execution_start":
+        running = { prompt_id: d.prompt_id, done: new Set(), node: null, step: 0, outputs: {} };
+        $("#stop").hidden = false;
+        fetchTotal(d.prompt_id);
+        setProgress("Starting…", 0);
+        loadRuns();
+        break;
+      case "execution_cached":
+        if (running && d.prompt_id === running.prompt_id) for (const n of d.nodes || []) running.done.add(n);
+        break;
+      case "executing":
+        if (!running || d.prompt_id !== running.prompt_id) break;
+        if (running.node) running.done.add(running.node);
+        running.node = d.node; running.step = 0;
+        updateProgress();
+        break;
+      case "progress":
+        if (!running || d.prompt_id !== running.prompt_id) break;
+        running.step = d.value / Math.max(1, d.max);
+        running.stepText = `${d.value}/${d.max}`;
+        updateProgress();
+        break;
+      case "executed":
+        if (!running || d.prompt_id !== running.prompt_id) break;
+        if (d.output?.pixaroma_videos) {
+          running.outputs[d.node] = d.output;
+          const what = OUT_LABEL(d.node);
+          toast(/^Segment/.test(what) ? `${what} ready — check it, Stop if it's wrong` : `${what} saved`);
+          loadRuns();
+        }
+        break;
+      case "execution_success":
+      case "execution_error":
+      case "execution_interrupted":
+        if (running && d.prompt_id === running.prompt_id) {
+          setProgress(m.type === "execution_success" ? "Done" : m.type === "execution_error" ? `Error in ${d.node_type}: ${d.exception_message}` : "Stopped", m.type === "execution_success" ? 1 : 0);
+          running = null; $("#stop").hidden = true;
+          loadRuns(); loadOptions();
+        }
+        break;
+    }
+  };
+}
+async function fetchTotal(pid) {
+  const local = lastBuilt[pid];
+  if (local && running) { running.titles = local.titles; running.total = Object.keys(local.titles).length; return; }
+  try {
+    const q = await fetch("/queue").then(r => r.json());
+    const item = q.queue_running.find(i => i[1] === pid);
+    if (item && running) {
+      running.total = Object.keys(item[2]).length;
+      running.titles = Object.fromEntries(Object.entries(item[2]).map(([k, v]) => [k, v._meta?.title || v.class_type]));
+    }
+  } catch (e) {}
+}
+function updateProgress() {
+  const r = running; if (!r) return;
+  const total = r.total || 1;
+  const frac = (r.done.size + (r.step || 0)) / total;
+  const title = r.node ? (r.titles?.[r.node] || r.node) : "";
+  setProgress(`${title}${r.step ? " · " + r.stepText : ""} — ${Math.round(frac * 100)}%`, frac);
+}
+
+// ---------------------------------------------------------------- boot
+async function loadOptions() {
+  try {
+    OPT = await fetch("mmh3/api/options").then(r => r.json());
+    if (S) render();
+  } catch (e) { toast("Couldn't load model lists"); }
+}
+(async function boot() {
+  await loadOptions();
+  let saved = null;
+  try { saved = (await fetch("mmh3/api/settings").then(r => r.json())).settings; } catch (e) {}
+  if (!saved) { try { saved = JSON.parse(localStorage.getItem("mmh3.settings")); } catch (e) {} }
+  const fresh = freshState(OPT.defaults);
+  S = saved ? { ...fresh, ...saved, upscale: { ...fresh.upscale, ...(saved.upscale || {}) } } : fresh;
+  const claimed = parseRatio(S.ratio), have = S.width / S.height;
+  if (!claimed || Math.abs(have - claimed.w / claimed.h) > 0.006) {
+    const hit = RATIOS.find(([name]) => { const r = parseRatio(name); return Math.abs(have - r.w / r.h) <= 0.006; });
+    S.ratio = hit ? hit[0] : "";
+  }
+  render();
+  setupCollapse();
+  connect();
+  loadRuns();
+})();
+</script>
+
+</body>
+</html>

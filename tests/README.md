@@ -22,4 +22,8 @@ both directions, and the wiring the docs promise. Regenerate the graph with
 `python3 workflow/_build_krea2_two_character.py "workflow/Krea2 Two-Character Identity.json"`
 after changing either the builder or the node's inputs, then re-run it.
 
+`test_mmh3_builder.py` checks the graph behind the `/mmh3` page. Run it with
+`MMH3_COMFY_URL=http://127.0.0.1:8189` to also check every node, input and model name
+against a running server's `/object_info` (nothing is queued).
+
 The FaceAnalysis nodes have no tests here; they need the FaceAnalysis fork's models.

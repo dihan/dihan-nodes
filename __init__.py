@@ -3,9 +3,13 @@ from .face_line_mask import FaceLineMask
 from .face_gender_detect import FaceGenderDetect
 from .mask_compare_image import ImageOverlayCompare
 from . import status_page
+from . import mmh3_page
 
 # Serves the mobile status dashboard at /status on ComfyUI's own port.
 status_page.setup()
+
+# Serves the MiniMax H3 Ref2VA generator page at /mmh3.
+mmh3_page.setup()
 
 NODE_CLASS_MAPPINGS = {
     "FaceDetectionMarker": FaceDetectionMarker,
