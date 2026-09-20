@@ -20,7 +20,7 @@ B = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(B)
 
 BASE = {
-    "refs": [{"image": "IMG_6216B.png"}, {"image": "house.png"}, {"image": "IMG_7223.jpg"}],
+    "refs": [{"image": "person.png"}, {"image": "room.png"}, {"image": "person_b.jpg"}],
     "blocks": [
         {"label": "subjects", "on": True, "where": "before", "text": "subject_definitions: A"},
         {"label": "off", "on": False, "where": "before", "text": "DISABLED"},
