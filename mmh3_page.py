@@ -250,10 +250,10 @@ def _register_routes():
             prompt, info = mmh3_builder.build(settings)
         except (mmh3_builder.BuildError, ValueError, TypeError, KeyError) as exc:
             return web.json_response({"error": str(exc)}, status=400)
-        try:
-            _write_settings(settings)
-        except OSError:
-            pass
+        # Deliberately no settings write here: the page posts a flattened
+        # payload (one batch's segments, the chain slots it resolved), and
+        # storing that would lose the batches it was flattened from. The page
+        # saves the real settings through /api/settings as they change.
         return web.json_response({"prompt": prompt, "info": info})
 
     return BASE

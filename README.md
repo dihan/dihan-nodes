@@ -73,6 +73,16 @@ control (Off / 8 / 16 / 32 / 64, the same set and rounding as Resolution Pixarom
 "Free" unlocks the two fields. H3 encodes in 16-pixel blocks, so the page says so when a
 size is not a multiple of 16.
 
+Longer sequences are built in batches: the Segments card has a tab per batch (1–3, 4–6,
+…), each holding its own segment prompts and seeds. With **Follow the batch tabs** on in
+the Chain card — the default — the chain slots are worked out for you: batch 1 starts
+fresh and writes clip 1, batch 2 continues from clip 1 and writes clip 2, and so on, with
+the maths following per-segment latent saving when that is on. The Chain fields then show
+what will be used and stay read-only; untick the box to set them by hand. A tab is ticked
+once its latent is on disk, and the page warns when the batch before the current one has
+not been generated yet. Each batch is a separate run and a separate mp4, continuous with
+the one before it.
+
 Each segment's mp4 appears under Runs as soon as that segment is sampled, before the
 next one starts, with a Stop button beside it — so a bad segment can be caught without
 waiting for the joined video and the upscale. Segments already written stay on disk.

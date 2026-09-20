@@ -202,6 +202,14 @@
   }
   .item .head input.label:focus { box-shadow: none; border-bottom: 1px solid var(--accent); border-radius: 0; }
   .item textarea.shot { min-height: 190px; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tabs button {
+    padding: 7px 12px; min-height: 36px; border-radius: 999px; font-size: 12px;
+    background: none; color: var(--muted);
+  }
+  .tabs button.on { background: var(--track); color: var(--text); border-color: var(--line2); }
+  .tabs button.done::after { content: " ✓"; color: var(--good); }
+  .tabs button.add { border-style: dashed; }
   .tag { font-size: 11px; font-weight: 700; color: var(--accent); letter-spacing: .05em; white-space: nowrap; }
   .seg-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
   .seg-meta input.seed { flex: 1 1 130px; width: auto; min-width: 0; padding: 6px 9px; font-size: 13px; }
@@ -323,7 +331,8 @@
 
       <section class="card" data-sec="segments">
         <h2>Segments <span class="right muted" id="segNote"></span></h2>
-        <p class="hint">One clip per segment, each continuing the motion of the one before. Action only — the shared blocks are added for you. Each finished segment appears under Runs straight away, so you can Stop before the rest are made.</p>
+        <p class="hint">One clip per segment, each continuing the motion of the one before. Action only — the shared blocks are added for you. Each finished segment appears under Runs straight away, so you can Stop before the rest are made. Tabs hold the next batch of segments: each one is its own run, picking up the chain where the batch before it ended.</p>
+        <div class="tabs" id="segTabs"></div>
         <div class="stack" id="segments"></div>
         <div class="row" style="margin-top:10px">
           <button id="addSeg">+ segment</button>
@@ -372,9 +381,13 @@
       <section class="card" data-sec="chain">
         <h2>Chain</h2>
         <p class="hint">Continue a previous run’s last segment, so a long sequence can be built a few segments at a time. Resolution must stay the same across a chain.</p>
+        <label class="switch" style="margin-bottom:10px">
+          <input type="checkbox" data-k="chain_auto" id="chainAuto">
+          Follow the batch tabs (pick the slots for me)
+        </label>
         <div class="grid2">
           <label class="f">Continue from<select data-k="load_index" data-num id="loadSel"></select></label>
-          <label class="f">Save this run as clip<input type="number" min="0" data-k="save_index" data-num></label>
+          <label class="f">Save this run as clip<input type="number" min="0" data-k="save_index" data-num id="saveIn"></label>
         </div>
         <label class="switch" style="margin-top:10px">
           <input type="checkbox" data-k="save_every_segment">
@@ -536,7 +549,7 @@ function freshState(d) {
   return {
     refs: [{ image: "" }, { image: "" }, { image: "" }],
     blocks: DEFAULT_BLOCKS.map(b => ({ ...b })),
-    segments: [1, 2, 3].map(() => ({ prompt: "", seed: "", random: true })),
+    batches: [newBatch()], batch: 0, chain_auto: true,
     width: d.width, height: d.height, ratio: "9:16", snap: d.snap ?? 32,
     seconds: d.seconds, fps: d.fps, steps: d.steps,
     sampler: d.sampler, scheduler: d.scheduler, context_length: d.context_length,
@@ -550,6 +563,39 @@ function freshState(d) {
     prefix: d.prefix, save_segments: d.save_segments,
   };
 }
+const newBatch = (n = 3) => ({ segments: Array.from({ length: n }, () => ({ prompt: "", seed: "", random: true })) });
+
+/** The batch being edited, and its segments. */
+const cur = () => S.batches[S.batch] || S.batches[0];
+const segs = () => cur().segments;
+
+/**
+ * Which chain slots a batch reads and writes.
+ *
+ * Batch 1 starts fresh and writes slot 1; every later batch continues from
+ * wherever the batch before it finished. With a latent per segment a batch of
+ * three writes three slots, so the walk has to run from the start rather than
+ * assume a fixed stride.
+ */
+function chainFor(index) {
+  let end = 0;
+  for (let i = 0; i <= index; i++) {
+    const n = (S.batches[i]?.segments || []).length || 1;
+    const save = end + 1;
+    end = S.save_every_segment ? save + n - 1 : save;
+    if (i === index) return { load: save - 1, save, end };
+  }
+  return { load: 0, save: 1, end: 1 };
+}
+
+/** The slots the run will use: derived from the tabs, or typed by hand. */
+function chainNow() {
+  if (S.chain_auto) return chainFor(S.batch);
+  const n = segs().length;
+  const save = +S.save_index || 0;
+  return { load: +S.load_index || 0, save, end: save && S.save_every_segment ? save + n - 1 : save };
+}
+
 const getK = (k) => k.split(".").reduce((o, p) => o == null ? o : o[p], S);
 function setK(k, v) {
   const parts = k.split("."); let o = S;
@@ -660,9 +706,44 @@ function renderBlocks() {
   });
 }
 
+function renderTabs() {
+  const box = $("#segTabs"); box.replaceChildren();
+  let first = 1;
+  S.batches.forEach((b, i) => {
+    const n = b.segments.length;
+    const range = n > 1 ? `${first}–${first + n - 1}` : `${first}`;
+    first += n;
+    const done = OPT.slots.some(x => x.index === chainFor(i).end);
+    box.append(h("button", {
+      class: (i === S.batch ? "on " : "") + (done ? "done" : ""),
+      title: done ? "Generated — its latent is on disk" : "Not generated yet",
+      onclick: () => {
+        if (i === S.batch && S.batches.length > 1 && !b.segments.some(x => x.prompt.trim())
+            && confirm(`Delete this empty batch (${range})?`)) {
+          S.batches.splice(i, 1);
+          S.batch = Math.min(S.batch, S.batches.length - 1);
+        } else S.batch = i;
+        changed(true);
+      },
+    }, range));
+  });
+  box.append(h("button", { class: "add", title: "Another batch, continuing from this one",
+    onclick: addBatch }, "+ batch"));
+}
+
+/** A new batch of the same size, and jump to it. */
+function addBatch() {
+  S.batches.push(newBatch(segs().length));
+  S.batch = S.batches.length - 1;
+  changed(true);
+  toast(`Batch ${S.batch + 1} continues from clip ${chainFor(S.batch).load}`);
+}
+
 function renderSegments() {
+  renderTabs();
   const box = $("#segments"); box.replaceChildren();
-  S.segments.forEach((s, i) => {
+  const list = segs();
+  list.forEach((s, i) => {
     const ta = h("textarea", { class: "shot", rows: 8, placeholder: `[Shot ${i + 1}] What happens in this segment…\n\n[0.03] Beats with timings go on their own lines.` });
     ta.value = s.prompt;
     ta.addEventListener("input", () => { s.prompt = ta.value; grow(ta); changed(); });
@@ -679,15 +760,15 @@ function renderSegments() {
         foldBtn(s),
         h("span", { class: "tag" }, `SEGMENT ${i + 1}`),
         h("span", { class: "grow" }),
-        h("button", { class: "ghost", title: "Duplicate", onclick: () => { S.segments.splice(i + 1, 0, { ...s }); changed(true); }, disabled: S.segments.length >= OPT.limits.segments }, "⧉"),
-        h("button", { class: "ghost", title: "Move up", disabled: i === 0, onclick: () => { [S.segments[i - 1], S.segments[i]] = [S.segments[i], S.segments[i - 1]]; changed(true); } }, "↑"),
-        h("button", { class: "ghost", title: "Delete", disabled: S.segments.length <= 1, onclick: () => { if (!s.prompt.trim() || confirm(`Delete segment ${i + 1}?`)) { S.segments.splice(i, 1); changed(true); } } }, "✕")),
+        h("button", { class: "ghost", title: "Duplicate", onclick: () => { list.splice(i + 1, 0, { ...s }); changed(true); }, disabled: list.length >= OPT.limits.segments }, "⧉"),
+        h("button", { class: "ghost", title: "Move up", disabled: i === 0, onclick: () => { [list[i - 1], list[i]] = [list[i], list[i - 1]]; changed(true); } }, "↑"),
+        h("button", { class: "ghost", title: "Delete", disabled: list.length <= 1, onclick: () => { if (!s.prompt.trim() || confirm(`Delete segment ${i + 1}?`)) { list.splice(i, 1); changed(true); } } }, "✕")),
       s.fold ? peek(s.prompt) : ta,
       s.fold ? null : h("div", { class: "seg-meta" },
         h("label", { class: "switch" }, lock, "Keep seed"), seed,
         h("span", { class: "note" }, s.random ? "new seed every run" : "same result on re-run"))));
   });
-  $("#addSeg").disabled = S.segments.length >= OPT.limits.segments;
+  $("#addSeg").disabled = list.length >= OPT.limits.segments;
 }
 
 function renderLoras() {
@@ -785,14 +866,13 @@ function bindFields() {
         renderRatios();
       }
       changed(false);
-      if (k === "load_index") renderChain();
     });
   }
 }
 
 function renderInfo() {
   const len = frameCount(+S.seconds || 0, S.fps || 24);
-  const ctx = +S.context_length, n = S.segments.length;
+  const ctx = +S.context_length, n = segs().length;
   const delivered = len * n - ctx * (n - 1) - (S.load_index > 0 ? ctx : 0);
   const r = parseRatio(S.ratio);
   const actual = (S.width / S.height).toFixed(3);
@@ -806,16 +886,35 @@ function renderInfo() {
   $("#upBody").style.opacity = S.upscale.enabled ? 1 : .45;
   $("#wIn").step = $("#hIn").step = S.snap || 1;
   const pv = $("#preview"); pv.replaceChildren();
-  S.segments.forEach((s, i) => pv.append(h("div", { class: "muted", style: { marginTop: "8px", fontSize: "12px" } }, `Segment ${i + 1}`), h("pre", { class: "preview" }, assemble(s.prompt))));
+  segs().forEach((s, i) => pv.append(h("div", { class: "muted", style: { marginTop: "8px", fontSize: "12px" } }, `Segment ${i + 1}`), h("pre", { class: "preview" }, assemble(s.prompt))));
   const note = $("#chainNote");
   const slot = i => `clip_${String(i).padStart(5, "0")}.safetensors`;
-  const last = S.save_index + (S.save_every_segment ? S.segments.length - 1 : 0);
-  const overwrite = OPT.slots.some(x => x.index >= S.save_index && x.index <= last) ? " Existing slots in that range are overwritten." : "";
-  note.textContent = S.save_index > 0
-    ? (S.save_every_segment
-        ? `Segments save to ${S.latent_folder}/${slot(S.save_index)} … ${slot(last)}, each as it finishes — so a run you stop part way can still be continued from.${overwrite}`
-        : `Only the last segment saves, to ${S.latent_folder}/${slot(S.save_index)}. Stop the run part way and there is nothing to continue from.${overwrite}`)
-    : "Chain latent won't be saved (save = 0).";
+  const { load, save, end } = chainNow();
+  // In auto mode the fields mirror the tabs, so keep them in step and out of reach
+  if (S.chain_auto) { S.load_index = load; S.save_index = save; }
+  $("#loadSel").disabled = $("#saveIn").disabled = S.chain_auto;
+  if (!$$("#loadSel option").some(o => +o.value === +S.load_index)) renderChain();
+  $("#loadSel").value = S.load_index;
+  $("#saveIn").value = S.save_index;
+
+  const missing = load > 0 && !OPT.slots.some(x => x.index === load);
+  const overwrite = save > 0 && OPT.slots.some(x => x.index >= save && x.index <= end);
+  const lines = [];
+  if (S.chain_auto) {
+    lines.push(S.batch === 0
+      ? `Batch 1 starts fresh and writes ${save === end ? slot(save) : `${slot(save)} … ${slot(end)}`}.`
+      : `Batch ${S.batch + 1} continues from ${slot(load)} — the end of batch ${S.batch} — and writes ${save === end ? slot(save) : `${slot(save)} … ${slot(end)}`}.`);
+  } else if (save > 0) {
+    lines.push(save === end
+      ? `Only the last segment saves, to ${S.latent_folder}/${slot(save)}.`
+      : `Segments save to ${S.latent_folder}/${slot(save)} … ${slot(end)}, each as it finishes.`);
+  } else {
+    lines.push("Chain latent won't be saved (save = 0).");
+  }
+  if (missing) lines.push(`⚠ ${slot(load)} is not on disk yet — generate the batch before this one first.`);
+  if (overwrite) lines.push("Existing slots in that range are overwritten.");
+  if (save > 0 && save === end && !S.save_every_segment) lines.push("Stop a run part way and it leaves nothing to continue from; tick the box above to save one per segment.");
+  note.textContent = lines.join(" ");
 }
 
 // ---------------------------------------------------------------- image picker
@@ -867,15 +966,28 @@ document.addEventListener("paste", async e => {
 
 // ---------------------------------------------------------------- buttons
 $("#addBlock").addEventListener("click", () => { S.blocks.push({ label: "", on: true, where: "before", text: "" }); changed(true); });
-$("#addSeg").addEventListener("click", () => { S.segments.push({ prompt: "", seed: "", random: true }); changed(true); });
+$("#addSeg").addEventListener("click", () => { segs().push({ prompt: "", seed: "", random: true }); changed(true); });
 $("#addLora").addEventListener("click", () => { S.loras.push({ name: "", on: true, strength: 1 }); changed(true); });
-$("#randAll").addEventListener("click", () => { S.segments.forEach(s => { s.random = true; s.seed = ""; }); changed(true); });
+$("#randAll").addEventListener("click", () => { segs().forEach(s => { s.random = true; s.seed = ""; }); changed(true); });
 $("#nextLink").addEventListener("click", () => {
-  const next = Math.max(1, (+S.save_index || 0) + (S.save_every_segment ? S.segments.length - 1 : 0));
+  if (S.chain_auto) return nextBatch();
+  const next = Math.max(1, chainNow().end);
   S.load_index = next; S.save_index = next + 1;
   changed(true); toast(`Continuing from clip ${next}, saving clip ${next + 1}`);
 });
-$("#resetChain").addEventListener("click", () => { S.load_index = 0; S.save_index = 1; changed(true); });
+
+/** Move to the batch after this one, adding it if it isn't there yet. */
+function nextBatch() {
+  if (S.batch + 1 >= S.batches.length) return addBatch();
+  S.batch += 1; changed(true);
+  window.scrollTo({ top: $("[data-sec=segments]").offsetTop - 60, behavior: "smooth" });
+  toast(`Batch ${S.batch + 1} — continues from clip ${chainFor(S.batch).load}`);
+}
+$("#resetChain").addEventListener("click", () => {
+  S.load_index = 0; S.save_index = 1;
+  if (S.chain_auto) S.batch = 0;
+  changed(true);
+});
 $("#clearLatents").addEventListener("click", async () => {
   const n = OPT.slots.length;
   if (!confirm(`Delete every saved chain latent in ${S.latent_folder}/?${n ? `\n\n${n} clip${n > 1 ? "s" : ""} on disk — any chain continuing from them has to start again.` : ""}`)) return;
@@ -886,7 +998,7 @@ $("#clearLatents").addEventListener("click", async () => {
     });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || "Delete failed");
-    S.load_index = 0; S.save_index = 1;
+    S.load_index = 0; S.save_index = 1; S.batch = 0;
     changed(true);
     await loadOptions();
     toast(j.deleted.length ? `Deleted ${j.deleted.length} latent${j.deleted.length > 1 ? "s" : ""} — chain reset to fresh` : "No saved latents to delete");
@@ -908,13 +1020,18 @@ $("#stop").addEventListener("click", async () => {
 async function generate() {
   const go = $("#go"); go.disabled = true;
   try {
-    const b = await fetch("mmh3/api/build", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(S) });
+    // The builder takes one flat run: this batch's segments and the slots it
+    // resolved to. S itself, with every batch, is saved separately.
+    const { load, save } = chainNow();
+    const payload = { ...S, segments: segs(), load_index: load, save_index: save };
+    const b = await fetch("mmh3/api/build", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     const bj = await b.json();
     if (!b.ok) throw new Error(bj.error || "Build failed");
     const titles = Object.fromEntries(Object.entries(bj.prompt).map(([k, v]) => [k, v._meta?.title || k]));
     const r = await fetch("/prompt", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: bj.prompt, client_id: CLIENT_ID, extra_data: { mmh3: true, mmh3_info: bj.info, mmh3_settings: S } }),
+      body: JSON.stringify({ prompt: bj.prompt, client_id: CLIENT_ID,
+        extra_data: { mmh3: true, mmh3_info: { ...bj.info, batch: S.batch }, mmh3_settings: payload } }),
     });
     const rj = await r.json();
     if (!r.ok || rj.error) {
@@ -987,15 +1104,18 @@ function renderRun(run, first) {
     h("div", { class: "head" },
       h("span", { class: "badge " + cls }, label),
       h("span", {}, run.extra.create_time ? fmtTime(run.extra.create_time) : ""),
+      info.batch != null ? h("span", { class: "muted" }, `batch ${info.batch + 1}`) : null,
       info.seconds ? h("span", { class: "muted" }, `${info.seconds}s · ${info.width}×${info.height}`) : null,
       info.seeds ? h("span", { class: "muted mono", title: "Segment seeds" }, "seeds " + info.seeds.join(", ")) : null,
       h("span", { class: "grow", style: { flex: 1 } }),
       settings ? h("button", { class: "ghost", onclick: () => restore(settings, info, false) }, "Load settings") : null,
       settings && info.seeds ? h("button", { class: "ghost", title: "Load these settings with every seed kept, to re-run or tweak one segment", onclick: () => restore(settings, info, true) }, "Keep seeds") : null,
-      first && st === "success" && info.save_index > 0 ? h("button", { onclick: () => {
-        S.load_index = info.save_index; S.save_index = info.save_index + 1; changed(true);
-        loadOptions(); toast(`Next run continues from clip ${info.save_index}`);
-      } }, "Approve → continue") : null,
+      first && st === "success" && info.save_index > 0 ? h("button", { onclick: async () => {
+        await loadOptions();
+        if (S.chain_auto) nextBatch();
+        else { S.load_index = info.save_index; S.save_index = info.save_index + 1; changed(true);
+               toast(`Next run continues from clip ${info.save_index}`); }
+      } }, S.chain_auto ? "Approve → next batch" : "Approve → continue") : null,
       run.state === "running" || run.state === "queued"
         ? h("button", { class: "danger", title: "Interrupt this run. Segments already saved stay on disk.",
             onclick: () => stopRun(run.id) }, "Stop")
@@ -1071,7 +1191,13 @@ function interrupted(run) {
 }
 function restore(settings, info, keepSeeds) {
   S = JSON.parse(JSON.stringify(settings));
-  if (keepSeeds && info.seeds) S.segments.forEach((s, i) => { if (info.seeds[i] != null) { s.seed = info.seeds[i]; s.random = false; } });
+  // A run stores the flattened payload: one batch's segments plus, since
+  // batches arrived, every batch. Prefer the batches; fall back to the flat
+  // list for runs queued before them.
+  if (!Array.isArray(S.batches) || !S.batches.length) S.batches = [{ segments: S.segments || newBatch().segments }];
+  delete S.segments;
+  S.batch = Math.min(Math.max(0, +info?.batch || 0), S.batches.length - 1);
+  if (keepSeeds && info.seeds) segs().forEach((s, i) => { if (info.seeds[i] != null) { s.seed = info.seeds[i]; s.random = false; } });
   changed(true);
   window.scrollTo({ top: 0, behavior: "smooth" });
   toast(keepSeeds ? "Loaded with seeds kept — untick Keep seed on a segment to re-roll just that one" : "Settings loaded");
@@ -1176,6 +1302,22 @@ async function loadOptions() {
   if (!saved) { try { saved = JSON.parse(localStorage.getItem("mmh3.settings")); } catch (e) {} }
   const fresh = freshState(OPT.defaults);
   S = saved ? { ...fresh, ...saved, upscale: { ...fresh.upscale, ...(saved.upscale || {}) } } : fresh;
+  // Settings saved before batches existed carry a flat segment list; it
+  // becomes batch 1. Someone already part way through a chain by hand keeps
+  // their slots (auto off), so nothing silently restarts their sequence.
+  // Test against what was SAVED, not against S: the fresh defaults already
+  // carry an empty batch, so checking S here would skip the migration and
+  // throw away the flat segment list it was supposed to carry over.
+  if (!Array.isArray(saved?.batches) || !saved.batches.length) {
+    const flat = Array.isArray(saved?.segments) && saved.segments.length ? saved.segments : null;
+    S.batches = [{ segments: flat || newBatch().segments }];
+    S.batch = 0;
+    if (saved) S.chain_auto = !(+saved.load_index > 0);
+  }
+  delete S.segments;
+  S.batch = Math.min(Math.max(0, +S.batch || 0), S.batches.length - 1);
+  S.chain_auto = S.chain_auto !== false;
+
   const claimed = parseRatio(S.ratio), have = S.width / S.height;
   if (!claimed || Math.abs(have - claimed.w / claimed.h) > 0.006) {
     const hit = RATIOS.find(([name]) => { const r = parseRatio(name); return Math.abs(have - r.w / r.h) <= 0.006; });
