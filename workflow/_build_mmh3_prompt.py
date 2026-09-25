@@ -129,7 +129,7 @@ def loader(path):
         "Connect 'prompt' to the prompt input of MiniMax H3 Reference to Video (drag onto the text box). "
         "Feed the reference images in the same slot order the prompt was written for.\n\n"
         "'duration' is the saved clip length in seconds.\n\n"
-        "Picking a saved prompt copies it into the text box; edit it there before queueing. Picking it again reloads the file.\n\n"
+        "Picking a saved prompt copies it into the text box; edit it there before queueing. 'save text over file' writes your edits back to that saved prompt; picking it again reloads the file.\n\n"
         "Press R after saving new prompts."],
            outputs=[])
     g.dump(path)

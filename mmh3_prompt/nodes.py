@@ -457,6 +457,36 @@ def _read_saved(name: str) -> str:
         return f.read().strip()
 
 
+def _read_meta(name: str) -> dict:
+    try:
+        with open(os.path.join(SAVE_DIR, name + ".json"), "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _mode_and_duration(prompt: str, meta: dict) -> tuple[str, float]:
+    mode, dur = infer_mode_and_duration(prompt)
+    return meta.get("mode", mode), float(meta.get("duration") or dur or 0.0)
+
+
+def _overwrite_saved(name: str, prompt: str) -> str:
+    """Replace an existing saved prompt's text and re-check it, so its .json report matches the new text."""
+    _read_saved(name)
+    prompt = prompt.strip()
+    if not prompt:
+        raise ValueError("Nothing to save: the text is empty.")
+    m = _read_meta(name)
+    r = lint(prompt, *_mode_and_duration(prompt, m), autofix=False)
+    m.update(passed=r.passed, errors=r.errors, warnings=r.warnings, report=r.report(),
+             saved=_dt.datetime.now().isoformat(timespec="seconds"))
+    with open(os.path.join(SAVE_DIR, name + ".txt"), "w", encoding="utf-8") as f:
+        f.write(prompt + "\n")
+    with open(os.path.join(SAVE_DIR, name + ".json"), "w", encoding="utf-8") as f:
+        json.dump(m, f, indent=2, ensure_ascii=False)
+    return r.report()
+
+
 class MMH3PromptSave:
     """Save the prompt as <name>.txt (+ .json with mode, duration, model and check report) for later use."""
 
@@ -525,16 +555,9 @@ class MMH3PromptLoad:
 
     def load(self, prompt_name, text=""):
         saved = _read_saved(prompt_name)
-        meta = {}
-        try:
-            with open(os.path.join(SAVE_DIR, prompt_name + ".json"), "r", encoding="utf-8") as f:
-                meta = json.load(f)
-        except Exception:
-            pass
+        meta = _read_meta(prompt_name)
         prompt = text.strip() or saved
-        mode, dur = infer_mode_and_duration(prompt)
-        mode = meta.get("mode", mode)
-        dur = float(meta.get("duration") or dur or 0.0)
+        mode, dur = _mode_and_duration(prompt, meta)
         report = meta.get("report", "")
         if prompt != saved:
             report = "edited after loading\n" + lint(prompt, mode, dur, autofix=False).report()
@@ -550,6 +573,17 @@ if PromptServer is not None and getattr(PromptServer, "instance", None) is not N
                                      headers={"Cache-Control": "no-store"})
         except FileNotFoundError as e:
             return web.json_response({"error": str(e)}, status=404)
+
+    @PromptServer.instance.routes.post("/mmh3/api/prompt")
+    async def _mmh3_overwrite_prompt(request):
+        """MMH3 Prompt Load's 'save text over file' button."""
+        data = await request.json()
+        try:
+            return web.json_response({"report": _overwrite_saved(data.get("name", ""), data.get("prompt", ""))})
+        except FileNotFoundError as e:
+            return web.json_response({"error": str(e)}, status=404)
+        except ValueError as e:
+            return web.json_response({"error": str(e)}, status=400)
 
 
 NODE_CLASS_MAPPINGS = {

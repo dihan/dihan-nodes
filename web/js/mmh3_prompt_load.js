@@ -1,4 +1,5 @@
-// MMH3 Prompt Load: picking a saved prompt copies it into the editable 'text' box.
+// MMH3 Prompt Load: picking a saved prompt copies it into the editable 'text' box,
+// and 'save text over file' writes the box back to that saved prompt.
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 
@@ -28,5 +29,21 @@ app.registerExtension({
       fill(value, true);
     };
     fill(pick.value, false);
+
+    const save = node.addWidget("button", "save text over file", null, async () => {
+      const name = pick.value;
+      if (!confirm(`Overwrite the saved prompt '${name}' with this text?`)) return;
+      const r = await api.fetchApi("/mmh3/api/prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, prompt: text.value }),
+      });
+      const out = await r.json();
+      app.extensionManager.toast.add(r.ok
+        ? { severity: "success", summary: `Saved '${name}'`, detail: out.report.split("\n")[0], life: 4000 }
+        : { severity: "error", summary: "Not saved", detail: out.error, life: 6000 });
+    });
+    save.serialize = false;
+    save.options = { ...(save.options || {}), serialize: false };
   },
 });

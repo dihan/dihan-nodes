@@ -73,7 +73,7 @@
     "Node name for S&R": "Note"
    },
    "widgets_values": [
-    "Copy this node into your H3 workflow.\n\nConnect 'prompt' to the prompt input of MiniMax H3 Reference to Video (drag onto the text box). Feed the reference images in the same slot order the prompt was written for.\n\n'duration' is the saved clip length in seconds.\n\nPicking a saved prompt copies it into the text box; edit it there before queueing. Picking it again reloads the file.\n\nPress R after saving new prompts."
+    "Copy this node into your H3 workflow.\n\nConnect 'prompt' to the prompt input of MiniMax H3 Reference to Video (drag onto the text box). Feed the reference images in the same slot order the prompt was written for.\n\n'duration' is the saved clip length in seconds.\n\nPicking a saved prompt copies it into the text box; edit it there before queueing. 'save text over file' writes your edits back to that saved prompt; picking it again reloads the file.\n\nPress R after saving new prompts."
    ]
   }
  ],
