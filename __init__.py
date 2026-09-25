@@ -35,4 +35,17 @@ try:
 except Exception as e:
     print(f"[dihan-nodes] Krea2 two-character nodes not loaded: {type(e).__name__}: {e}", flush=True)
 
-__all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']
+# MiniMax H3 prompt writer (any LLM + the H3 guide + a checker). Guarded the same
+# way, so a problem there never takes the other nodes down with it.
+try:
+    from . import mmh3_prompt
+    NODE_CLASS_MAPPINGS.update(mmh3_prompt.NODE_CLASS_MAPPINGS)
+    NODE_DISPLAY_NAME_MAPPINGS.update(mmh3_prompt.NODE_DISPLAY_NAME_MAPPINGS)
+except Exception as e:
+    print(f"[dihan-nodes] MMH3 prompt nodes not loaded: {type(e).__name__}: {e}", flush=True)
+
+# Frontend extensions only (the prompt nodes' text preview). The /status and /mmh3
+# pages in web/ are served by their own routes, not from here.
+WEB_DIRECTORY = "./web/js"
+
+__all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS', 'WEB_DIRECTORY']

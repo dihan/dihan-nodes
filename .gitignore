@@ -37,3 +37,7 @@ Thumbs.db
 
 # Runtime state for the status page (failure log, in-flight run marker)
 .state/ 
+
+# MMH3 prompt writer: local API keys and test-time saves
+mmh3_prompt/api_keys.json
+mmh3_prompt/saved_prompts/

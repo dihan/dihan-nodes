@@ -1,0 +1,85 @@
+{
+  "_readme": "Presets for the 'MMH3 Model Select' dropdown. Edit freely, then press R (refresh) in ComfyUI. provider: ollama | openai_compat | anthropic. vision: true lets the model see the reference pictures. api_key_env: environment variable holding the key (or put it in api_keys.json). Installed Ollama models are also added to the dropdown automatically.",
+  "ollama_base_url": "http://127.0.0.1:11434",
+  "discover_ollama": true,
+  "ollama_defaults": { "keep_alive": 0, "num_ctx": 16384, "vision": false },
+  "vision_hints": ["vl", "vision", "llava", "gemma3", "minicpm-v", "moondream", "llama3.2-vision", "qwen2.5vl", "qwen3-vl", "mistral-small3"],
+  "presets": [
+    {
+      "label": "Claude Sonnet 5 (Anthropic API)",
+      "provider": "anthropic",
+      "model": "claude-sonnet-5",
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "vision": true
+    },
+    {
+      "label": "Claude Opus 5.5 (Anthropic API)",
+      "provider": "anthropic",
+      "model": "claude-opus-5-5",
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "vision": true
+    },
+    {
+      "label": "Claude Haiku 4.5 (Anthropic API, cheap)",
+      "provider": "anthropic",
+      "model": "claude-haiku-4-5-20251001",
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "vision": true
+    },
+    {
+      "label": "OpenAI GPT-5 (OpenAI API)",
+      "provider": "openai_compat",
+      "base_url": "https://api.openai.com/v1",
+      "model": "gpt-5",
+      "api_key_env": "OPENAI_API_KEY",
+      "vision": true,
+      "no_temperature": true,
+      "max_tokens_param": "max_completion_tokens",
+      "send_seed": false
+    },
+    {
+      "label": "Gemini 2.5 Flash (Google API)",
+      "provider": "openai_compat",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "model": "gemini-2.5-flash",
+      "api_key_env": "GEMINI_API_KEY",
+      "vision": true,
+      "send_seed": false
+    },
+    {
+      "label": "OpenRouter (any model - set model_override)",
+      "provider": "openai_compat",
+      "base_url": "https://openrouter.ai/api/v1",
+      "model": "qwen/qwen2.5-vl-72b-instruct",
+      "api_key_env": "OPENROUTER_API_KEY",
+      "vision": true
+    },
+    {
+      "label": "LM Studio (local server)",
+      "provider": "openai_compat",
+      "base_url": "http://127.0.0.1:1234/v1",
+      "model": "local-model",
+      "key_optional": true,
+      "vision": true
+    },
+    {
+      "label": "Ollama - qwen2.5vl:7b (local, vision)",
+      "provider": "ollama",
+      "model": "qwen2.5vl:7b",
+      "vision": true
+    },
+    {
+      "label": "Ollama - gemma3:12b (local, vision)",
+      "provider": "ollama",
+      "model": "gemma3:12b",
+      "vision": true
+    },
+    {
+      "label": "Ollama - qwen3:14b (local, text only)",
+      "provider": "ollama",
+      "model": "qwen3:14b",
+      "vision": false,
+      "think": false
+    }
+  ]
+}

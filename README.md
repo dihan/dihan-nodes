@@ -100,6 +100,26 @@ comfyui-h3-motion-context, ComfyUI-Pixaroma (image loader, join, Save MP4, Free 
 and ComfyUI-SeedVR2_VideoUpscaler. The last-used form is saved in
 `.state/mmh3_settings.json`, so it is shared between devices.
 
+## MiniMax H3 Prompt Writer
+
+Seven nodes that write H3 prompts with **any LLM you pick**:
+- Claude, OpenAI, Gemini or OpenRouter over their APIs
+- any installed Ollama model, discovered automatically
+- LM Studio or any other OpenAI-compatible server
+
+The model follows the H3 guide, Ref2VA by default. MiniMax's official six-section format is built in: `subject_definitions`, `summary`, `retention_analysis`, `detailed_description`, `overall_soundscape`, `non_diegetic_music`.
+
+A checker tests every draft against the guide's hard rules and sends failures back to the model to fix. Those rules are:
+- labels, task types and retention markers
+- shot timing
+- dialogue appears once, with mouth movement described
+- the four camera amplitude/speed phrases
+- an ambience floor in the soundscape
+
+The prompt is saved to `ComfyUI/user/h3_prompts/`, so you can write it first and load it later into any workflow. There is also a Refine node for fixing what a render got wrong, and a standalone Check for hand-written prompts.
+
+Open **[`workflow/MMH3 Prompt Builder.json`](workflow/MMH3%20Prompt%20Builder.json)** to start. The full reference is in [docs/MMH3_PROMPT_WRITER.md](docs/MMH3_PROMPT_WRITER.md).
+
 ## Available Nodes
 
 | Node | Display name | Category | Inputs | Outputs |
@@ -110,12 +130,20 @@ and ComfyUI-SeedVR2_VideoUpscaler. The last-used form is saved in
 | `ImageOverlayCompare` | Image Overlay Compare | `image/overlay` | `IMAGE`, `IMAGE` | *(preview only)* |
 | `Krea2TwoCharacterPatch` | Krea2 Two-Character Identity (patch) | `dihan-nodes/krea2` | `MODEL`, `VAE`, `IMAGE`, `IMAGE` | `MODEL` |
 | `Krea2TwoCharacterEncode` | Krea2 Two-Character Encode | `dihan-nodes/krea2` | `CLIP`, `IMAGE`, `IMAGE` | `CONDITIONING` |
+| `MMH3ModelSelect` | MMH3 Model Select | `dihan-nodes/mmh3` | *(widgets)* | `MMH3_LLM` |
+| `MMH3PromptSpec` | MMH3 Prompt Spec (guide) | `dihan-nodes/mmh3` | *(widgets)* | `STRING` |
+| `MMH3PromptWriter` | MMH3 Prompt Writer | `dihan-nodes/mmh3` | `MMH3_LLM`, `STRING`, `IMAGE` ×0–4 | `STRING`, `STRING`, `MMH3_META` |
+| `MMH3PromptRefine` | MMH3 Prompt Refine | `dihan-nodes/mmh3` | `MMH3_LLM`, `STRING`, `STRING`, `MMH3_META`, `IMAGE` ×0–4 | `STRING`, `STRING`, `MMH3_META` |
+| `MMH3PromptCheck` | MMH3 Prompt Check | `dihan-nodes/mmh3` | `STRING` | `STRING`, `STRING`, `BOOLEAN` |
+| `MMH3PromptSave` | MMH3 Prompt Save | `dihan-nodes/mmh3` | `STRING`, `MMH3_META`, `STRING` | `STRING` |
+| `MMH3PromptLoad` | MMH3 Prompt Load | `dihan-nodes/mmh3` | *(saved prompt list)* | `STRING`, `STRING`, `FLOAT`, `STRING` |
 
 The three `FaceAnalysis` nodes take an `ANALYSIS_MODELS` input from the
 [forked ComfyUI_FaceAnalysis_Advanced](https://github.com/dihan/ComfyUI_FaceAnalysis_Advanced).
 `ImageOverlayCompare` is standalone and works with any images. The two `krea2` nodes
 need a Krea 2 model with the identity-edit LoRA and are documented separately in
-[docs/KREA2_TWO_CHARACTER.md](docs/KREA2_TWO_CHARACTER.md).
+[docs/KREA2_TWO_CHARACTER.md](docs/KREA2_TWO_CHARACTER.md). The seven `mmh3` nodes are documented in
+[docs/MMH3_PROMPT_WRITER.md](docs/MMH3_PROMPT_WRITER.md).
 
 See [docs/NODES.md](docs/NODES.md) for the full parameter reference.
 

@@ -1,6 +1,6 @@
 # Tests
 
-Offline checks for the Krea2 two-character nodes. They stub out ComfyUI, so they run
+Offline checks for the Krea2 two-character nodes, the /mmh3 graph builder and the MMH3 prompt writer. They stub out ComfyUI, so they run
 anywhere `torch` and `einops` are importable — no ComfyUI, no model weights, no GPU.
 
 ```bash
@@ -25,5 +25,10 @@ after changing either the builder or the node's inputs, then re-run it.
 `test_mmh3_builder.py` checks the graph behind the `/mmh3` page. Run it with
 `MMH3_COMFY_URL=http://127.0.0.1:8189` to also check every node, input and model name
 against a running server's `/object_info` (nothing is queued).
+
+`test_mmh3_prompt.py` covers the MMH3 prompt writer with no ComfyUI, GPU or API key: the checker on
+good and broken Ref2VA / base-mode prompts, the Ollama, OpenAI-compatible and Anthropic wire formats against
+a local mock server (including the fix-up round), save/load, and both shipped `MMH3 Prompt` workflows
+against `INPUT_TYPES`. Regenerate those with `python3 workflow/_build_mmh3_prompt.py` after changing inputs.
 
 The FaceAnalysis nodes have no tests here; they need the FaceAnalysis fork's models.

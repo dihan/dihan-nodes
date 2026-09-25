@@ -1,0 +1,105 @@
+{
+ "last_node_id": 2,
+ "last_link_id": 0,
+ "nodes": [
+  {
+   "id": 1,
+   "type": "MMH3PromptLoad",
+   "pos": [
+    40,
+    70
+   ],
+   "size": [
+    460,
+    390
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "prompt",
+     "type": "STRING",
+     "links": [],
+     "slot_index": 0
+    },
+    {
+     "name": "mode",
+     "type": "STRING",
+     "links": [],
+     "slot_index": 1
+    },
+    {
+     "name": "duration",
+     "type": "FLOAT",
+     "links": [],
+     "slot_index": 2
+    },
+    {
+     "name": "report",
+     "type": "STRING",
+     "links": [],
+     "slot_index": 3
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "MMH3PromptLoad"
+   },
+   "widgets_values": [
+    "(no saved prompts yet)"
+   ],
+   "color": "#232",
+   "bgcolor": "#353"
+  },
+  {
+   "id": 2,
+   "type": "Note",
+   "pos": [
+    520,
+    70
+   ],
+   "size": [
+    380,
+    390
+   ],
+   "flags": {},
+   "order": 1,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "properties": {
+    "Node name for S&R": "Note"
+   },
+   "widgets_values": [
+    "Copy this node into your H3 workflow.\n\nConnect 'prompt' to the prompt input of MiniMax H3 Reference to Video (drag onto the text box). Feed the reference images in the same slot order the prompt was written for.\n\n'duration' is the saved clip length in seconds.\n\nPress R after saving new prompts. Hand edits to the .txt files in ComfyUI/user/h3_prompts are picked up."
+   ]
+  }
+ ],
+ "links": [],
+ "groups": [
+  {
+   "title": "Saved H3 prompt → Reference to Video",
+   "bounding": [
+    20,
+    20,
+    900,
+    460
+   ],
+   "color": "#3f789e",
+   "font_size": 22,
+   "flags": {}
+  }
+ ],
+ "config": {},
+ "extra": {
+  "ds": {
+   "scale": 0.75,
+   "offset": [
+    40,
+    40
+   ]
+  }
+ },
+ "version": 0.4
+}

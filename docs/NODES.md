@@ -1,6 +1,6 @@
 # Node Documentation
 
-This pack registers six nodes.
+This pack registers thirteen nodes.
 
 | Class | Display name | Category | File |
 |-------|--------------|----------|------|
@@ -10,6 +10,13 @@ This pack registers six nodes.
 | [`ImageOverlayCompare`](#imageoverlaycompare) | Image Overlay Compare | `image/overlay` | `mask_compare_image.py` |
 | [`Krea2TwoCharacterPatch`](KREA2_TWO_CHARACTER.md) | Krea2 Two-Character Identity (patch) | `dihan-nodes/krea2` | `krea2_two_character.py` |
 | [`Krea2TwoCharacterEncode`](KREA2_TWO_CHARACTER.md) | Krea2 Two-Character Encode | `dihan-nodes/krea2` | `krea2_two_character.py` |
+| [`MMH3ModelSelect`](MMH3_PROMPT_WRITER.md) | MMH3 Model Select | `dihan-nodes/mmh3` | `mmh3_prompt/nodes.py` |
+| [`MMH3PromptSpec`](MMH3_PROMPT_WRITER.md) | MMH3 Prompt Spec (guide) | `dihan-nodes/mmh3` | `mmh3_prompt/nodes.py` |
+| [`MMH3PromptWriter`](MMH3_PROMPT_WRITER.md) | MMH3 Prompt Writer | `dihan-nodes/mmh3` | `mmh3_prompt/nodes.py` |
+| [`MMH3PromptRefine`](MMH3_PROMPT_WRITER.md) | MMH3 Prompt Refine | `dihan-nodes/mmh3` | `mmh3_prompt/nodes.py` |
+| [`MMH3PromptCheck`](MMH3_PROMPT_WRITER.md) | MMH3 Prompt Check | `dihan-nodes/mmh3` | `mmh3_prompt/nodes.py` |
+| [`MMH3PromptSave`](MMH3_PROMPT_WRITER.md) | MMH3 Prompt Save | `dihan-nodes/mmh3` | `mmh3_prompt/nodes.py` |
+| [`MMH3PromptLoad`](MMH3_PROMPT_WRITER.md) | MMH3 Prompt Load | `dihan-nodes/mmh3` | `mmh3_prompt/nodes.py` |
 
 The three `FaceAnalysis` nodes require an `ANALYSIS_MODELS` input supplied by the
 [forked ComfyUI_FaceAnalysis_Advanced](https://github.com/dihan/ComfyUI_FaceAnalysis_Advanced).
@@ -30,6 +37,10 @@ FaceGenderDetect.
 The two `krea2` nodes are independent of FaceAnalysis entirely — they need a Krea 2
 model with the identity-edit LoRA, and are documented in
 [KREA2_TWO_CHARACTER.md](KREA2_TWO_CHARACTER.md).
+
+The seven `mmh3` nodes write MiniMax H3 prompts with a chosen LLM and check them against
+the H3 guide; they need no model weights and are documented in
+[MMH3_PROMPT_WRITER.md](MMH3_PROMPT_WRITER.md).
 
 The pack also serves a mobile status dashboard at `/status`; that is a web route, not
 a node, and is documented in the [README](../README.md#mobile-status-page).

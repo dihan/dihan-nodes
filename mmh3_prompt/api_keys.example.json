@@ -1,0 +1,6 @@
+{
+  "ANTHROPIC_API_KEY": "sk-ant-...",
+  "OPENAI_API_KEY": "sk-...",
+  "GEMINI_API_KEY": "...",
+  "OPENROUTER_API_KEY": "sk-or-..."
+}
