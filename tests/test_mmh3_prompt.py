@@ -244,7 +244,7 @@ def test_save_load_roundtrip():
     save.save(GOOD, "living room", False, None)
     names = N.MMH3PromptLoad.INPUT_TYPES()["required"]["prompt_name"][0]
     assert set(names) >= {"living room", "living room_2"}, names
-    prompt, mode, dur, _ = N.MMH3PromptLoad().load("living room")["result"]
+    prompt, mode, dur, _ = N.MMH3PromptLoad().load("living room")
     assert prompt == GOOD and mode == "Ref2VA" and dur == 6.0
     meta2 = json.load(open(os.path.join(_SAVE, "living room_2.json")))
     assert meta2["mode"] == "Ref2VA" and meta2["passed"], meta2

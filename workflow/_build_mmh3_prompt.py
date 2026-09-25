@@ -122,14 +122,15 @@ def builder(path):
 def loader(path):
     g = Graph()
     g.group("Saved H3 prompt → Reference to Video", 20, 20, 900, 460)
-    g.node(1, "MMH3PromptLoad", (40, 70), (460, 390), ["(no saved prompts yet)"],
+    g.node(1, "MMH3PromptLoad", (40, 70), (460, 390), ["(no saved prompts yet)", ""],
            outputs=[("prompt", "STRING"), ("mode", "STRING"), ("duration", "FLOAT"), ("report", "STRING")], color=GREEN)
     g.node(2, "Note", (520, 70), (380, 390), [
         "Copy this node into your H3 workflow.\n\n"
         "Connect 'prompt' to the prompt input of MiniMax H3 Reference to Video (drag onto the text box). "
         "Feed the reference images in the same slot order the prompt was written for.\n\n"
         "'duration' is the saved clip length in seconds.\n\n"
-        "Press R after saving new prompts. Hand edits to the .txt files in ComfyUI/user/h3_prompts are picked up."],
+        "Picking a saved prompt copies it into the text box; edit it there before queueing. Picking it again reloads the file.\n\n"
+        "Press R after saving new prompts."],
            outputs=[])
     g.dump(path)
 

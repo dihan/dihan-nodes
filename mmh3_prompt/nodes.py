@@ -29,6 +29,12 @@ try:
 except Exception:  # outside ComfyUI (tests)
     SAVE_DIR = os.environ.get("H3_PROMPTS_DIR", os.path.join(providers.PACK_DIR, "saved_prompts"))
 
+try:
+    from aiohttp import web
+    from server import PromptServer
+except Exception:  # outside ComfyUI (tests)
+    web = PromptServer = None
+
 NONE_SAVED = "(no saved prompts yet)"
 
 
@@ -444,6 +450,13 @@ def _saved_names():
     return [f[:-4] for f in files]
 
 
+def _read_saved(name: str) -> str:
+    if name not in _saved_names():  # also keeps the name inside SAVE_DIR
+        raise FileNotFoundError(f"No saved prompt '{name}' in {SAVE_DIR}. Save one with 'MMH3 Prompt Save', then press R.")
+    with open(os.path.join(SAVE_DIR, name + ".txt"), "r", encoding="utf-8") as f:
+        return f.read().strip()
+
+
 class MMH3PromptSave:
     """Save the prompt as <name>.txt (+ .json with mode, duration, model and check report) for later use."""
 
@@ -491,39 +504,52 @@ class MMH3PromptSave:
 
 
 class MMH3PromptLoad:
-    """Load a saved prompt into any workflow. Press R to refresh the list after saving new ones."""
+    """Load a saved prompt into any workflow. Picking one copies it into 'text', where it can be edited before use."""
 
     @classmethod
     def INPUT_TYPES(cls):
-        return {"required": {"prompt_name": (_saved_names() or [NONE_SAVED],)}}
+        return {"required": {"prompt_name": (_saved_names() or [NONE_SAVED],)},
+                "optional": {"text": ("STRING", {"multiline": True, "default": "",
+                                                 "tooltip": "Filled with the saved prompt when you pick one. Edit it freely; this text is what gets sent. Empty: the saved file is used as is."})}}
 
     RETURN_TYPES = ("STRING", "STRING", "FLOAT", "STRING")
     RETURN_NAMES = ("prompt", "mode", "duration", "report")
     FUNCTION = "load"
     CATEGORY = CATEGORY
-    OUTPUT_NODE = True  # shows the loaded text even when nothing is wired yet
+    OUTPUT_NODE = True  # runs even when nothing is wired yet
 
     @classmethod
-    def IS_CHANGED(cls, prompt_name):
+    def IS_CHANGED(cls, prompt_name, text=""):
         p = os.path.join(SAVE_DIR, prompt_name + ".txt")
         return os.path.getmtime(p) if os.path.exists(p) else float("nan")
 
-    def load(self, prompt_name):
-        p = os.path.join(SAVE_DIR, prompt_name + ".txt")
-        if prompt_name == NONE_SAVED or not os.path.exists(p):
-            raise FileNotFoundError(f"No saved prompt '{prompt_name}' in {SAVE_DIR}. Save one with 'MMH3 Prompt Save', then press R.")
-        with open(p, "r", encoding="utf-8") as f:
-            prompt = f.read().strip()
+    def load(self, prompt_name, text=""):
+        saved = _read_saved(prompt_name)
         meta = {}
         try:
             with open(os.path.join(SAVE_DIR, prompt_name + ".json"), "r", encoding="utf-8") as f:
                 meta = json.load(f)
         except Exception:
             pass
+        prompt = text.strip() or saved
         mode, dur = infer_mode_and_duration(prompt)
         mode = meta.get("mode", mode)
         dur = float(meta.get("duration") or dur or 0.0)
-        return {"ui": {"text": [prompt]}, "result": (prompt, mode, dur, meta.get("report", ""))}
+        report = meta.get("report", "")
+        if prompt != saved:
+            report = "edited after loading\n" + lint(prompt, mode, dur, autofix=False).report()
+        return prompt, mode, dur, report
+
+
+if PromptServer is not None and getattr(PromptServer, "instance", None) is not None:
+    @PromptServer.instance.routes.get("/mmh3/api/prompt")
+    async def _mmh3_saved_prompt(request):
+        """Lets MMH3 Prompt Load fill its text box as soon as a saved prompt is picked."""
+        try:
+            return web.json_response({"prompt": _read_saved(request.rel_url.query.get("name", ""))},
+                                     headers={"Cache-Control": "no-store"})
+        except FileNotFoundError as e:
+            return web.json_response({"error": str(e)}, status=404)
 
 
 NODE_CLASS_MAPPINGS = {

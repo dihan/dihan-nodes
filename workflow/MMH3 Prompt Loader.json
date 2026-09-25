@@ -47,7 +47,8 @@
     "Node name for S&R": "MMH3PromptLoad"
    },
    "widgets_values": [
-    "(no saved prompts yet)"
+    "(no saved prompts yet)",
+    ""
    ],
    "color": "#232",
    "bgcolor": "#353"
@@ -72,7 +73,7 @@
     "Node name for S&R": "Note"
    },
    "widgets_values": [
-    "Copy this node into your H3 workflow.\n\nConnect 'prompt' to the prompt input of MiniMax H3 Reference to Video (drag onto the text box). Feed the reference images in the same slot order the prompt was written for.\n\n'duration' is the saved clip length in seconds.\n\nPress R after saving new prompts. Hand edits to the .txt files in ComfyUI/user/h3_prompts are picked up."
+    "Copy this node into your H3 workflow.\n\nConnect 'prompt' to the prompt input of MiniMax H3 Reference to Video (drag onto the text box). Feed the reference images in the same slot order the prompt was written for.\n\n'duration' is the saved clip length in seconds.\n\nPicking a saved prompt copies it into the text box; edit it there before queueing. Picking it again reloads the file.\n\nPress R after saving new prompts."
    ]
   }
  ],

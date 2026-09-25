@@ -2,7 +2,7 @@
 import { app } from "../../scripts/app.js";
 import { ComfyWidgets } from "../../scripts/widgets.js";
 
-const SHOW = new Set(["MMH3PromptWriter", "MMH3PromptRefine", "MMH3PromptCheck", "MMH3PromptSave", "MMH3PromptLoad"]);
+const SHOW = new Set(["MMH3PromptWriter", "MMH3PromptRefine", "MMH3PromptCheck", "MMH3PromptSave"]);
 
 app.registerExtension({
   name: "dihan.mmh3.prompt.preview",

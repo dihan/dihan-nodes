@@ -146,7 +146,7 @@ Open **[`workflow/MMH3 Prompt Builder.json`](workflow/MMH3%20Prompt%20Builder.js
 | `MMH3PromptRefine` | MMH3 Prompt Refine | `dihan-nodes/mmh3` | `MMH3_LLM`, `STRING`, `STRING`, `MMH3_META`, `IMAGE` ×0–4 | `STRING`, `STRING`, `MMH3_META` |
 | `MMH3PromptCheck` | MMH3 Prompt Check | `dihan-nodes/mmh3` | `STRING` | `STRING`, `STRING`, `BOOLEAN` |
 | `MMH3PromptSave` | MMH3 Prompt Save | `dihan-nodes/mmh3` | `STRING`, `MMH3_META`, `STRING` | `STRING` |
-| `MMH3PromptLoad` | MMH3 Prompt Load | `dihan-nodes/mmh3` | *(saved prompt list)* | `STRING`, `STRING`, `FLOAT`, `STRING` |
+| `MMH3PromptLoad` | MMH3 Prompt Load | `dihan-nodes/mmh3` | *(saved prompt list)*, `text` (editable copy) | `STRING`, `STRING`, `FLOAT`, `STRING` |
 
 The three `FaceAnalysis` nodes take an `ANALYSIS_MODELS` input from the
 [forked ComfyUI_FaceAnalysis_Advanced](https://github.com/dihan/ComfyUI_FaceAnalysis_Advanced).
