@@ -75,6 +75,13 @@
       "vision": true
     },
     {
+      "label": "Ollama - gemma4 26b-a4b heretic Q4_K_M (local, vision)",
+      "provider": "ollama",
+      "model": "hf.co/Stabhappy/gemma-4-26B-A4B-it-heretic-GGUF:Q4_K_M",
+      "vision": true,
+      "think": false
+    },
+    {
       "label": "Ollama - qwen3:14b (local, text only)",
       "provider": "ollama",
       "model": "qwen3:14b",
